@@ -1,0 +1,17 @@
+INSTRUCTIONS — FFmpeg pour CompressIt
+======================================
+
+Placez ici uniquement le fichier : ffmpeg.exe
+
+Téléchargement (Windows, ~90 Mo) :
+  1. Allez sur : https://www.gyan.dev/ffmpeg/builds/
+  2. Téléchargez : ffmpeg-release-essentials.zip
+  3. Extrayez l'archive
+  4. Copiez uniquement le fichier  bin\ffmpeg.exe  dans CE dossier
+
+Résultat attendu :
+  compressit/
+  └── bin/
+      └── ffmpeg.exe   ← ce fichier
+
+Aucune installation système requise. CompressIt l'utilisera automatiquement.

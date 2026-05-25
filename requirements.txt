@@ -1,0 +1,23 @@
+# ============================================================
+# CompressIt — Dépendances Python
+# Install : py -m pip install -r requirements.txt
+# ============================================================
+
+# Serveur web
+fastapi>=0.111.0
+uvicorn[standard]>=0.29.0
+python-multipart>=0.0.9
+
+# Compression images
+Pillow>=10.3.0
+
+# Compression PDF
+pikepdf>=8.15.0
+
+# Compression vidéo (wrapper FFmpeg)
+# Requiert FFmpeg installé : https://ffmpeg.org/download.html
+ffmpeg-python>=0.2.0
+
+# Compression archives — algorithmes rapides (optionnels mais recommandés)
+zstandard>=0.22.0
+brotli>=1.1.0
