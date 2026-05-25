@@ -25,15 +25,25 @@
       background: var(--surface-2);
       transition: all .15s;
       user-select: none;
+      overflow: hidden;
     }
     .page-thumb:hover { border-color: var(--primary); }
     .page-thumb.selected { border-color: var(--primary); background: var(--primary-light); }
+    .canvas-wrapper {
+      width: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      min-height: 80px;
+    }
     .page-thumb canvas {
       max-width: 100%;
       height: auto;
       border-radius: 4px;
       box-shadow: var(--shadow);
       transition: transform .3s ease;
+      display: block;
     }
     .page-num {
       font-size: .75rem;
@@ -215,20 +225,45 @@
 
       pagesGrid.innerHTML = '';
       for (let i = 1; i <= totalPages; i++) {
-        const page = await pdfDoc.getPage(i);
-        const viewport = page.getViewport({ scale: 0.3 });
-        const canvas = document.createElement('canvas');
-        canvas.width = viewport.width;
-        canvas.height = viewport.height;
-        await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-
+        // Créer la card immédiatement avec un placeholder
         const thumb = document.createElement('div');
         thumb.className = 'page-thumb';
         thumb.dataset.index = i - 1;
-        thumb.innerHTML = `<span class="page-num">Page ${i}</span>`;
-        thumb.insertBefore(canvas, thumb.firstChild);
+
+        const wrapper = document.createElement('div');
+        wrapper.className = 'canvas-wrapper';
+
+        const canvas = document.createElement('canvas');
+        canvas.style.opacity = '0';
+        wrapper.appendChild(canvas);
+        thumb.appendChild(wrapper);
+        thumb.insertAdjacentHTML('beforeend', `<span class="page-num">Page ${i}</span>`);
         thumb.addEventListener('click', () => togglePage(thumb, i - 1));
         pagesGrid.appendChild(thumb);
+
+        // Rendu asynchrone sans bloquer les autres pages
+        (async (pageNum, cvs) => {
+          try {
+            const page = await pdfDoc.getPage(pageNum);
+            const viewport = page.getViewport({ scale: 0.3 });
+            cvs.width = viewport.width;
+            cvs.height = viewport.height;
+            await page.render({ canvasContext: cvs.getContext('2d'), viewport }).promise;
+            cvs.style.opacity = '1';
+            cvs.style.transition = 'opacity .3s';
+          } catch(e) {
+            cvs.style.opacity = '1';
+            const ctx = cvs.getContext('2d');
+            cvs.width = 90; cvs.height = 120;
+            ctx.fillStyle = '#f1f5f9';
+            ctx.fillRect(0, 0, 90, 120);
+            ctx.fillStyle = '#94a3b8';
+            ctx.font = '11px sans-serif';
+            ctx.textAlign = 'center';
+            ctx.fillText('Page', 45, 55);
+            ctx.fillText(pageNum, 45, 70);
+          }
+        })(i, canvas);
       }
 
       updateSelectedInfo();
@@ -272,15 +307,10 @@
           pageRotations[idx] = (pageRotations[idx] + angle) % 360;
           const thumb = pagesGrid.querySelector(`[data-index="${idx}"]`);
           const canvas = thumb.querySelector('canvas');
-          canvas.style.transform = `rotate(${pageRotations[idx]}deg)`;
-          // Ajuster les marges pour que la miniature reste visible après rotation
           const r = pageRotations[idx];
-          if (r === 90 || r === 270) {
-            const diff = (canvas.height - canvas.width) / 2;
-            canvas.style.margin = `${diff}px 0`;
-          } else {
-            canvas.style.margin = '0';
-          }
+          canvas.style.transform = `rotate(${r}deg)`;
+          // Quand la page pivote à 90/270°, on réduit la scale pour qu'elle tienne dans la card
+          canvas.style.scale = (r === 90 || r === 270) ? '0.7' : '1';
         });
       });
     });
