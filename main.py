@@ -29,6 +29,7 @@ from compressors.pdf_tools import (
     rotate_pdf, rotate_pdf_map, watermark_pdf, add_page_numbers,
     delete_pages, unlock_pdf, protect_pdf,
 )
+from compressors.image_tools import resize_image, convert_image, crop_image, rotate_image
 
 # Résolution des chemins compatible PyInstaller (--onefile extrait dans sys._MEIPASS)
 if getattr(sys, "frozen", False):
@@ -419,6 +420,100 @@ async def pdf_protect(
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         protect_pdf(input_path, output_path, password=password)
         return {"success": True, "download_id": uid, "output_filename": "protected.pdf"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Redimensionner image ----
+@app.post("/image/resize")
+async def image_resize(
+    file: UploadFile = File(...),
+    width: int = Form(None),
+    height: int = Form(None),
+    keep_ratio: bool = Form(True),
+):
+    uid = uuid.uuid4().hex
+    ext = Path(file.filename).suffix.lower()
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    try:
+        with open(input_path, "wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        output_path = OUTPUT_DIR / f"{uid}_output{ext}"
+        result = resize_image(input_path, output_path, width=width, height=height, keep_ratio=keep_ratio)
+        output_filename = Path(file.filename).stem + "_resized" + result.suffix
+        return {"success": True, "download_id": uid, "output_filename": output_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Convertir image ----
+@app.post("/image/convert")
+async def image_convert(
+    file: UploadFile = File(...),
+    target_format: str = Form("webp"),
+):
+    uid = uuid.uuid4().hex
+    ext = Path(file.filename).suffix.lower()
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    try:
+        with open(input_path, "wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        output_path = OUTPUT_DIR / f"{uid}_output{ext}"
+        result = convert_image(input_path, output_path, target_format=target_format)
+        output_filename = Path(file.filename).stem + "_converted" + result.suffix
+        return {"success": True, "download_id": uid, "output_filename": output_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Recadrer image ----
+@app.post("/image/crop")
+async def image_crop(
+    file: UploadFile = File(...),
+    left: int = Form(0),
+    top: int = Form(0),
+    right: int = Form(...),
+    bottom: int = Form(...),
+):
+    uid = uuid.uuid4().hex
+    ext = Path(file.filename).suffix.lower()
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    try:
+        with open(input_path, "wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        output_path = OUTPUT_DIR / f"{uid}_output{ext}"
+        result = crop_image(input_path, output_path, left=left, top=top, right=right, bottom=bottom)
+        output_filename = Path(file.filename).stem + "_cropped" + result.suffix
+        return {"success": True, "download_id": uid, "output_filename": output_filename}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Rotation / flip image ----
+@app.post("/image/rotate")
+async def image_rotate(
+    file: UploadFile = File(...),
+    angle: int = Form(None),
+    flip: str = Form(None),
+):
+    uid = uuid.uuid4().hex
+    ext = Path(file.filename).suffix.lower()
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    try:
+        with open(input_path, "wb") as fh:
+            shutil.copyfileobj(file.file, fh)
+        output_path = OUTPUT_DIR / f"{uid}_output{ext}"
+        result = rotate_image(input_path, output_path, angle=angle or 0, flip=flip)
+        output_filename = Path(file.filename).stem + "_rotated" + result.suffix
+        return {"success": True, "download_id": uid, "output_filename": output_filename}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
     finally:
