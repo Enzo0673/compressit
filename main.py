@@ -100,6 +100,14 @@ async def service_worker_static():
     return FileResponse(path=sw_path, media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
 
 
+@app.get("/tool/{tool_name}", response_class=HTMLResponse)
+async def tool_page(tool_name: str):
+    tool_path = BASE_DIR / "static" / "tools" / f"{tool_name}.html"
+    if not tool_path.exists():
+        raise HTTPException(status_code=404, detail="Outil introuvable")
+    return HTMLResponse(content=tool_path.read_text(encoding="utf-8"))
+
+
 @app.get("/", response_class=HTMLResponse)
 async def root():
     html_path = BASE_DIR / "static" / "index.html"

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>CompressIt</title>
+  <title>CompressIt — Outils fichiers gratuits et locaux</title>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6366f1" />
@@ -12,11 +12,11 @@
   <meta name="apple-mobile-web-app-title" content="CompressIt" />
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
 </head>
-<body>
-  <div class="app">
+<body class="home-body">
+  <div class="home-app">
 
     <!-- Header -->
-    <header class="header">
+    <header class="home-header">
       <div class="logo">
         <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
           <rect width="32" height="32" rx="8" fill="#6366f1"/>
@@ -25,197 +25,177 @@
         </svg>
         <span class="logo-text">CompressIt</span>
       </div>
-      <span class="tagline">Compression locale &amp; gratuite</span>
+      <span class="home-tagline">100% local &mdash; vos fichiers ne quittent jamais votre machine</span>
     </header>
 
-    <!-- Drop Zone -->
-    <main class="main">
-      <div class="drop-zone" id="dropZone">
-        <div class="drop-icon">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none">
-            <path d="M24 8V32M24 8L16 16M24 8L32 16" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-            <path d="M8 36H40" stroke="#6366f1" stroke-width="3" stroke-linecap="round"/>
-          </svg>
-        </div>
-        <p class="drop-title">Glissez votre fichier ici</p>
-        <p class="drop-sub">ou</p>
-        <label class="btn-browse" for="fileInput">Parcourir</label>
-        <input type="file" id="fileInput" hidden accept="image/*,video/*,.pdf,.zip,.tar,.gz,.bz2,.7z,.rar,.zst,.xz" />
-        <p class="drop-formats">Images · Vidéos · PDF · Archives</p>
-      </div>
+    <!-- Hero -->
+    <div class="hero">
+      <h1 class="hero-title">Tous vos outils fichiers,<br>en un seul endroit</h1>
+      <p class="hero-sub">Gratuit, sans inscription, sans limite de taille</p>
+    </div>
 
-      <!-- Panneau de configuration (masqué au départ) -->
-      <div class="config-panel" id="configPanel" hidden>
-        <div class="file-preview" id="filePreview"></div>
-
-        <!-- Niveau simple -->
-        <div class="level-selector">
-          <p class="section-label">Niveau de compression</p>
-          <div class="level-buttons">
-            <button class="level-btn" data-level="light">
-              <span class="level-icon">🪶</span>
-              <span class="level-name">Léger</span>
-              <span class="level-desc">Qualité maximale</span>
-            </button>
-            <button class="level-btn active" data-level="standard">
-              <span class="level-icon">⚖️</span>
-              <span class="level-name">Standard</span>
-              <span class="level-desc">Meilleur compromis</span>
-            </button>
-            <button class="level-btn" data-level="aggressive">
-              <span class="level-icon">💪</span>
-              <span class="level-name">Agressif</span>
-              <span class="level-desc">Poids minimal</span>
-            </button>
-          </div>
-        </div>
-
-        <!-- Toggle mode expert -->
-        <button class="expert-toggle" id="expertToggle">
-          <span>Mode expert</span>
-          <svg id="expertArrow" width="16" height="16" viewBox="0 0 16 16" fill="none">
-            <path d="M4 6L8 10L12 6" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-          </svg>
-        </button>
-
-        <!-- Options expertes (masquées par défaut) -->
-        <div class="expert-panel" id="expertPanel" hidden>
-          <!-- Image -->
-          <div class="expert-section" id="expertImage" hidden>
-            <p class="section-label">Options image</p>
-            <div class="expert-grid">
-              <label>Qualité JPEG/WebP (1–100)
-                <input type="number" id="imgQuality" min="1" max="100" placeholder="Auto" />
-              </label>
-              <label>Format de sortie
-                <select id="imgFormat">
-                  <option value="">Auto (même format)</option>
-                  <option value="jpeg">JPEG</option>
-                  <option value="webp">WebP (meilleure compression)</option>
-                  <option value="png">PNG</option>
-                </select>
-              </label>
-              <label>Largeur max (px)
-                <input type="number" id="imgMaxWidth" min="100" max="8000" placeholder="Pas de limite" />
-              </label>
-            </div>
-          </div>
-
-          <!-- Vidéo -->
-          <div class="expert-section" id="expertVideo" hidden>
-            <p class="section-label">Options vidéo</p>
-            <div class="expert-grid">
-              <label>Codec
-                <select id="vidCodec">
-                  <option value="h264">H.264 — Compatible universel</option>
-                  <option value="h265">H.265/HEVC — 50% plus petit</option>
-                  <option value="vp9">VP9 — Open source</option>
-                </select>
-              </label>
-              <label>CRF (qualité, 0=max, 51=min)
-                <input type="number" id="vidCrf" min="0" max="51" placeholder="Auto" />
-              </label>
-              <label>Preset encodage
-                <select id="vidPreset">
-                  <option value="ultrafast">Ultra rapide</option>
-                  <option value="fast">Rapide</option>
-                  <option value="medium" selected>Moyen (recommandé)</option>
-                  <option value="slow">Lent (meilleur ratio)</option>
-                  <option value="veryslow">Très lent (ratio max)</option>
-                </select>
-              </label>
-              <label>Résolution max
-                <select id="vidHeight">
-                  <option value="">Originale</option>
-                  <option value="1080">1080p</option>
-                  <option value="720">720p</option>
-                  <option value="480">480p</option>
-                </select>
-              </label>
-            </div>
-          </div>
-
-          <!-- PDF -->
-          <div class="expert-section" id="expertPdf" hidden>
-            <p class="section-label">Options PDF</p>
-            <div class="expert-grid">
-              <label>DPI images internes
-                <input type="number" id="pdfDpi" min="30" max="300" placeholder="Auto" />
-              </label>
-              <label class="checkbox-label">
-                <input type="checkbox" id="pdfMeta" checked />
-                Supprimer les métadonnées
-              </label>
-            </div>
-          </div>
-
-          <!-- Archive -->
-          <div class="expert-section" id="expertArchive" hidden>
-            <p class="section-label">Options archive</p>
-            <div class="expert-grid">
-              <label>Algorithme
-                <select id="arcAlgo">
-                  <option value="">Auto</option>
-                  <option value="zstd">Zstandard (rapide)</option>
-                  <option value="lzma">LZMA/XZ (ratio max)</option>
-                  <option value="gzip">Gzip (universel)</option>
-                  <option value="brotli">Brotli (web)</option>
-                </select>
-              </label>
-              <label>Niveau compression (1–22)
-                <input type="number" id="arcLevel" min="1" max="22" placeholder="Auto" />
-              </label>
-            </div>
-          </div>
-        </div>
-
-        <button class="btn-compress" id="btnCompress">
+    <!-- Catégorie PDF -->
+    <section class="tool-section">
+      <div class="section-header">
+        <span class="section-icon pdf-icon">
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            <rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/>
+            <path d="M4 2h8l4 4v12a1 1 0 01-1 1H5a1 1 0 01-1-1V3a1 1 0 011-1z" stroke="#ef4444" stroke-width="1.5" fill="none"/>
+            <path d="M12 2v4h4" stroke="#ef4444" stroke-width="1.5"/>
+            <path d="M7 11h6M7 14h4" stroke="#ef4444" stroke-width="1.5" stroke-linecap="round"/>
           </svg>
-          Compresser
-        </button>
+        </span>
+        <h2 class="section-title">PDF</h2>
       </div>
-
-      <!-- Zone de progression -->
-      <div class="progress-panel" id="progressPanel" hidden>
-        <div class="progress-spinner"></div>
-        <p class="progress-label" id="progressLabel">Compression en cours…</p>
-        <div class="progress-bar-wrap">
-          <div class="progress-bar" id="progressBar"></div>
-        </div>
-        <p class="progress-elapsed"><span id="progressElapsed">0s</span> écoulées</p>
+      <div class="tools-grid">
+        <a class="tool-card" href="/tool/merge-pdf">
+          <span class="tool-icon">🔗</span>
+          <span class="tool-name">Fusionner PDF</span>
+          <span class="tool-desc">Combiner plusieurs PDF en un</span>
+        </a>
+        <a class="tool-card" href="/tool/split-pdf">
+          <span class="tool-icon">✂️</span>
+          <span class="tool-name">Diviser PDF</span>
+          <span class="tool-desc">Extraire des pages d'un PDF</span>
+        </a>
+        <a class="tool-card" href="/tool/compress-pdf">
+          <span class="tool-icon">📦</span>
+          <span class="tool-name">Compresser PDF</span>
+          <span class="tool-desc">Réduire le poids d'un PDF</span>
+        </a>
+        <a class="tool-card" href="/tool/pdf-to-jpg">
+          <span class="tool-icon">🖼️</span>
+          <span class="tool-name">PDF vers JPG</span>
+          <span class="tool-desc">Convertir chaque page en image</span>
+        </a>
+        <a class="tool-card" href="/tool/jpg-to-pdf">
+          <span class="tool-icon">📄</span>
+          <span class="tool-name">JPG vers PDF</span>
+          <span class="tool-desc">Assembler des images en PDF</span>
+        </a>
+        <a class="tool-card" href="/tool/rotate-pdf">
+          <span class="tool-icon">🔄</span>
+          <span class="tool-name">Rotation PDF</span>
+          <span class="tool-desc">Pivoter les pages d'un PDF</span>
+        </a>
+        <a class="tool-card" href="/tool/watermark-pdf">
+          <span class="tool-icon">💧</span>
+          <span class="tool-name">Filigrane PDF</span>
+          <span class="tool-desc">Ajouter un texte en filigrane</span>
+        </a>
+        <a class="tool-card" href="/tool/page-numbers-pdf">
+          <span class="tool-icon">🔢</span>
+          <span class="tool-name">Numéroter pages</span>
+          <span class="tool-desc">Ajouter des numéros de page</span>
+        </a>
+        <a class="tool-card" href="/tool/delete-pages-pdf">
+          <span class="tool-icon">🗑️</span>
+          <span class="tool-name">Supprimer pages</span>
+          <span class="tool-desc">Retirer des pages d'un PDF</span>
+        </a>
+        <a class="tool-card" href="/tool/unlock-pdf">
+          <span class="tool-icon">🔓</span>
+          <span class="tool-name">Déverrouiller PDF</span>
+          <span class="tool-desc">Supprimer le mot de passe</span>
+        </a>
+        <a class="tool-card" href="/tool/protect-pdf">
+          <span class="tool-icon">🔒</span>
+          <span class="tool-name">Protéger PDF</span>
+          <span class="tool-desc">Ajouter un mot de passe</span>
+        </a>
+        <a class="tool-card coming-soon" href="#">
+          <span class="tool-icon">🔧</span>
+          <span class="tool-name">Réparer PDF</span>
+          <span class="tool-desc">Bientôt disponible</span>
+        </a>
       </div>
+    </section>
 
-      <!-- Résultat -->
-      <div class="result-panel" id="resultPanel" hidden>
-        <div class="result-badge" id="resultBadge"></div>
-        <div class="result-stats" id="resultStats"></div>
-        <div class="result-actions">
-          <a class="btn-download" id="btnDownload" href="#">
-            <svg width="18" height="18" viewBox="0 0 18 18" fill="none">
-              <path d="M9 3V11M9 11L5 7M9 11L13 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-              <path d="M3 14H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>
-            </svg>
-            Télécharger
-          </a>
-          <button class="btn-reset" id="btnReset">Nouveau fichier</button>
-        </div>
+    <!-- Catégorie Image -->
+    <section class="tool-section">
+      <div class="section-header">
+        <span class="section-icon img-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="2" width="16" height="16" rx="3" stroke="#6366f1" stroke-width="1.5" fill="none"/>
+            <circle cx="7" cy="7" r="1.5" fill="#6366f1"/>
+            <path d="M2 13l4-4 3 3 3-3 4 4" stroke="#6366f1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+        </span>
+        <h2 class="section-title">Images</h2>
       </div>
-
-      <!-- Erreur -->
-      <div class="error-panel" id="errorPanel" hidden>
-        <div class="error-icon">!</div>
-        <p class="error-msg" id="errorMsg"></p>
-        <button class="btn-reset" id="btnErrorReset">Réessayer</button>
+      <div class="tools-grid">
+        <a class="tool-card" href="/tool/compress-image">
+          <span class="tool-icon">📦</span>
+          <span class="tool-name">Compresser image</span>
+          <span class="tool-desc">Réduire le poids sans perte visible</span>
+        </a>
+        <a class="tool-card" href="/tool/resize-image">
+          <span class="tool-icon">📐</span>
+          <span class="tool-name">Redimensionner</span>
+          <span class="tool-desc">Changer la taille en pixels</span>
+        </a>
+        <a class="tool-card" href="/tool/convert-image">
+          <span class="tool-icon">🔁</span>
+          <span class="tool-name">Convertir format</span>
+          <span class="tool-desc">JPG, PNG, WebP, BMP...</span>
+        </a>
+        <a class="tool-card" href="/tool/crop-image">
+          <span class="tool-icon">✂️</span>
+          <span class="tool-name">Recadrer</span>
+          <span class="tool-desc">Couper une zone de l'image</span>
+        </a>
+        <a class="tool-card" href="/tool/rotate-image">
+          <span class="tool-icon">🔄</span>
+          <span class="tool-name">Rotation / Flip</span>
+          <span class="tool-desc">Pivoter ou retourner l'image</span>
+        </a>
       </div>
-    </main>
+    </section>
 
-    <footer class="footer">100% local &mdash; vos fichiers ne quittent jamais votre machine</footer>
+    <!-- Catégorie Vidéo -->
+    <section class="tool-section">
+      <div class="section-header">
+        <span class="section-icon vid-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="4" width="12" height="12" rx="2" stroke="#10b981" stroke-width="1.5" fill="none"/>
+            <path d="M14 8l4-2v8l-4-2V8z" stroke="#10b981" stroke-width="1.5" stroke-linejoin="round" fill="none"/>
+          </svg>
+        </span>
+        <h2 class="section-title">Vidéo</h2>
+      </div>
+      <div class="tools-grid">
+        <a class="tool-card" href="/tool/compress-video">
+          <span class="tool-icon">🎬</span>
+          <span class="tool-name">Compresser vidéo</span>
+          <span class="tool-desc">Réduire le poids d'une vidéo</span>
+        </a>
+      </div>
+    </section>
+
+    <!-- Catégorie Archives -->
+    <section class="tool-section">
+      <div class="section-header">
+        <span class="section-icon arc-icon">
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <rect x="2" y="2" width="16" height="16" rx="3" stroke="#f59e0b" stroke-width="1.5" fill="none"/>
+            <path d="M2 7h16M8 2v5M12 2v5" stroke="#f59e0b" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+        </span>
+        <h2 class="section-title">Archives</h2>
+      </div>
+      <div class="tools-grid">
+        <a class="tool-card" href="/tool/compress-archive">
+          <span class="tool-icon">📦</span>
+          <span class="tool-name">Compresser archive</span>
+          <span class="tool-desc">ZIP, 7z, RAR, TAR...</span>
+        </a>
+      </div>
+    </section>
+
+    <footer class="home-footer">
+      CompressIt &mdash; 100% local, aucune donnée envoyée sur internet
+    </footer>
   </div>
 
-  <script src="/static/app.js"></script>
   <script>
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js');

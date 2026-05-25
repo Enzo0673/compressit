@@ -1,0 +1,227 @@
+/* =========================================================
+   CompressIt — tool.js
+   Script commun à toutes les pages outils
+   ========================================================= */
+
+function initTool(config) {
+  const dropZone      = document.getElementById('dropZone');
+  const fileInput     = document.getElementById('fileInput');
+  const configPanel   = document.getElementById('configPanel');
+  const progressPanel = document.getElementById('progressPanel');
+  const resultPanel   = document.getElementById('resultPanel');
+  const errorPanel    = document.getElementById('errorPanel');
+  const btnCompress   = document.getElementById('btnCompress');
+  const btnDownload   = document.getElementById('btnDownload');
+  const btnReset      = document.getElementById('btnReset');
+  const btnErrorReset = document.getElementById('btnErrorReset');
+  const expertToggle  = document.getElementById('expertToggle');
+  const expertPanel   = document.getElementById('expertPanel');
+  const expertArrow   = document.getElementById('expertArrow');
+
+  let currentFile = null;
+  let currentDownloadId = null;
+  let selectedLevel = 'standard';
+
+  const FILE_ICONS = { image: '🖼️', video: '🎬', pdf: '📄', archive: '📦' };
+  const EXT_TYPE = {
+    jpg: 'image', jpeg: 'image', png: 'image', webp: 'image',
+    gif: 'image', bmp: 'image', tiff: 'image', tif: 'image',
+    pdf: 'pdf',
+    mp4: 'video', mov: 'video', avi: 'video', mkv: 'video',
+    webm: 'video', m4v: 'video', flv: 'video',
+    zip: 'archive', '7z': 'archive', rar: 'archive',
+    gz: 'archive', tar: 'archive', bz2: 'archive',
+    zst: 'archive', lz4: 'archive', xz: 'archive',
+  };
+
+  function detectType(filename) {
+    const ext = filename.split('.').pop().toLowerCase();
+    return EXT_TYPE[ext] || 'archive';
+  }
+
+  function formatBytes(bytes) {
+    if (bytes < 1024) return bytes + ' o';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' Ko';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' Mo';
+  }
+
+  // ---- Drag & Drop ----
+  if (dropZone) {
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropZone.classList.remove('drag-over');
+      const file = e.dataTransfer.files[0];
+      if (file) loadFile(file);
+    });
+    dropZone.addEventListener('click', e => {
+      if (e.target.closest('label')) return;
+      fileInput.click();
+    });
+  }
+
+  if (fileInput) {
+    fileInput.addEventListener('change', () => {
+      if (fileInput.files[0]) loadFile(fileInput.files[0]);
+    });
+  }
+
+  function loadFile(file) {
+    currentFile = file;
+    const type = detectType(file.name);
+    const preview = document.getElementById('filePreview');
+    if (preview) {
+      preview.innerHTML = `
+        <span class="file-icon">${FILE_ICONS[type] || '📄'}</span>
+        <div class="file-info">
+          <div class="file-name">${file.name}</div>
+          <div class="file-size">${formatBytes(file.size)}</div>
+        </div>
+      `;
+    }
+    showPanel(configPanel);
+  }
+
+  // ---- Level buttons ----
+  document.querySelectorAll('.level-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+      btn.classList.add('active');
+      selectedLevel = btn.dataset.level;
+    });
+  });
+
+  // ---- Expert toggle ----
+  if (expertToggle && expertPanel) {
+    expertToggle.addEventListener('click', () => {
+      const isOpen = !expertPanel.hidden;
+      expertPanel.hidden = isOpen;
+      expertToggle.classList.toggle('open', !isOpen);
+      if (expertArrow) expertArrow.classList.toggle('rotated', !isOpen);
+    });
+  }
+
+  // ---- Progress bar ----
+  let _progressInterval = null;
+
+  function startProgress(fileSizeBytes, fileType) {
+    const mbSize = fileSizeBytes / (1024 * 1024);
+    const durations = { image: 800, pdf: 1500, video: mbSize * 1200, archive: mbSize * 600 };
+    const estimatedMs = Math.max(1000, Math.min(durations[fileType] || mbSize * 800, 60000));
+    const bar = document.getElementById('progressBar');
+    const elapsed = document.getElementById('progressElapsed');
+    bar.style.width = '0%';
+    bar.style.transition = 'none';
+    let startTime = Date.now();
+    _progressInterval = setInterval(() => {
+      const t = (Date.now() - startTime) / estimatedMs;
+      const pct = 95 * (1 - Math.exp(-3 * t));
+      bar.style.width = pct.toFixed(1) + '%';
+      if (elapsed) elapsed.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+    }, 80);
+  }
+
+  function finishProgress() {
+    clearInterval(_progressInterval);
+    _progressInterval = null;
+    const bar = document.getElementById('progressBar');
+    bar.style.transition = 'width 0.3s ease';
+    bar.style.width = '100%';
+  }
+
+  // ---- Compress ----
+  if (btnCompress) {
+    btnCompress.addEventListener('click', async () => {
+      if (!currentFile) return;
+      const fileType = detectType(currentFile.name);
+      showPanel(progressPanel);
+      startProgress(currentFile.size, fileType);
+
+      const fd = new FormData();
+      fd.append('file', currentFile);
+      fd.append('level', selectedLevel);
+
+      // Options image
+      const imgQ = document.getElementById('imgQuality');
+      const imgFmt = document.getElementById('imgFormat');
+      const imgW = document.getElementById('imgMaxWidth');
+      if (imgQ && imgQ.value) fd.append('img_quality', imgQ.value);
+      if (imgFmt && imgFmt.value) fd.append('img_format', imgFmt.value);
+      if (imgW && imgW.value) fd.append('img_max_width', imgW.value);
+
+      // Options vidéo
+      const vidCrf = document.getElementById('vidCrf');
+      const vidCodec = document.getElementById('vidCodec');
+      const vidPreset = document.getElementById('vidPreset');
+      const vidH = document.getElementById('vidHeight');
+      if (vidCrf && vidCrf.value) fd.append('vid_crf', vidCrf.value);
+      if (vidCodec && vidCodec.value) fd.append('vid_codec', vidCodec.value);
+      if (vidPreset && vidPreset.value) fd.append('vid_preset', vidPreset.value);
+      if (vidH && vidH.value) fd.append('vid_max_height', vidH.value);
+
+      // Options PDF
+      const pdfDpi = document.getElementById('pdfDpi');
+      const pdfMeta = document.getElementById('pdfMeta');
+      if (pdfDpi && pdfDpi.value) fd.append('pdf_dpi', pdfDpi.value);
+      if (pdfMeta) fd.append('pdf_remove_metadata', pdfMeta.checked ? 'true' : 'false');
+
+      // Options archive
+      const arcAlgo = document.getElementById('arcAlgo');
+      const arcLvl = document.getElementById('arcLevel');
+      if (arcAlgo && arcAlgo.value) fd.append('arc_algo', arcAlgo.value);
+      if (arcLvl && arcLvl.value) fd.append('arc_level', arcLvl.value);
+
+      try {
+        const res = await fetch('/compress', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Erreur serveur');
+        finishProgress();
+        setTimeout(() => { currentDownloadId = data.download_id; showResult(data); }, 350);
+      } catch (err) {
+        finishProgress();
+        showError(err.message);
+      }
+    });
+  }
+
+  // ---- Result ----
+  function showResult(data) {
+    document.getElementById('resultBadge').textContent = `−${data.gain_pct}%`;
+    document.getElementById('resultStats').innerHTML = `
+      <div class="stat-item"><span class="stat-label">Avant</span><span class="stat-value">${formatBytes(data.original_size)}</span></div>
+      <div class="stat-item"><span class="stat-label">Après</span><span class="stat-value">${formatBytes(data.compressed_size)}</span></div>
+      <div class="stat-item"><span class="stat-label">Gain</span><span class="stat-value" style="color:var(--success)">−${formatBytes(data.original_size - data.compressed_size)}</span></div>
+    `;
+    if (btnDownload) { btnDownload.href = `/download/${data.download_id}`; btnDownload.download = data.output_filename; }
+    showPanel(resultPanel);
+  }
+
+  function showError(msg) {
+    const el = document.getElementById('errorMsg');
+    if (el) el.textContent = msg;
+    showPanel(errorPanel);
+  }
+
+  // ---- Reset ----
+  function reset() {
+    if (currentDownloadId) {
+      fetch(`/cleanup/${currentDownloadId}`, { method: 'DELETE' }).catch(() => {});
+      currentDownloadId = null;
+    }
+    currentFile = null;
+    if (fileInput) fileInput.value = '';
+    showPanel(dropZone);
+  }
+
+  if (btnReset) btnReset.addEventListener('click', reset);
+  if (btnErrorReset) btnErrorReset.addEventListener('click', reset);
+
+  // ---- Panel switcher ----
+  const ALL_PANELS = [dropZone, configPanel, progressPanel, resultPanel, errorPanel].filter(Boolean);
+  function showPanel(panel) {
+    ALL_PANELS.forEach(p => { p.style.display = (p === panel) ? '' : 'none'; p.hidden = (p !== panel); });
+  }
+
+  showPanel(dropZone);
+}
