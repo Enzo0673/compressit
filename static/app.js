@@ -62,7 +62,10 @@ dropZone.addEventListener('drop', e => {
   const file = e.dataTransfer.files[0];
   if (file) loadFile(file);
 });
-dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('click', (e) => {
+  if (e.target.closest('label')) return;
+  fileInput.click();
+});
 fileInput.addEventListener('change', () => {
   if (fileInput.files[0]) loadFile(fileInput.files[0]);
 });
