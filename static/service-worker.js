@@ -1,9 +1,10 @@
-const CACHE_NAME = 'compressit-v1';
+const CACHE_NAME = 'compressit-v2';
 const STATIC_ASSETS = [
-  '/',
   '/static/style.css',
-  '/static/app.js',
+  '/static/tool.js',
   '/static/manifest.json',
+  '/static/icons/icon-192.png',
+  '/static/icons/icon-512.png',
 ];
 
 // Installation : mise en cache des assets statiques
@@ -24,18 +25,23 @@ self.addEventListener('activate', event => {
   self.clients.claim();
 });
 
-// Fetch : cache-first pour les assets statiques, network-first pour les requêtes API
+// Fetch : network-first pour les pages HTML, cache-first pour les assets statiques
 self.addEventListener('fetch', event => {
   const url = new URL(event.request.url);
 
-  // Requêtes API (compress, download, cleanup) → toujours réseau
+  // Toujours réseau pour les API et les pages HTML
   if (url.pathname.startsWith('/compress') ||
       url.pathname.startsWith('/download') ||
       url.pathname.startsWith('/cleanup') ||
-      url.pathname.startsWith('/health')) {
+      url.pathname.startsWith('/health') ||
+      url.pathname.startsWith('/pdf/') ||
+      url.pathname === '/' ||
+      url.pathname.startsWith('/tool/') ||
+      url.pathname.endsWith('.html')) {
     return;
   }
 
+  // Cache-first uniquement pour les assets statiques (CSS, JS, icônes)
   event.respondWith(
     caches.match(event.request).then(cached => {
       return cached || fetch(event.request).then(response => {
