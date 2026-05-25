@@ -84,36 +84,16 @@ def _parse_ranges(ranges_str: str, total: int) -> List[List[int]]:
 # ---- PDF vers JPG ----
 def pdf_to_jpg(input_path: Path, output_path: Path, dpi: int = 150) -> Path:
     """Convertit chaque page en JPG, retourne un ZIP."""
+    from pdf2image import convert_from_path
     zip_path = output_path.with_suffix(".zip")
-
-    with pikepdf.open(input_path) as pdf:
-        total = len(pdf.pages)
-        with zipfile.ZipFile(zip_path, "w") as zf:
-            for i, page in enumerate(pdf.pages):
-                # Rendu de la page via pikepdf + PIL
-                page_pdf = pikepdf.Pdf.new()
-                page_pdf.pages.append(page)
-                buf = io.BytesIO()
-                page_pdf.save(buf)
-                buf.seek(0)
-
-                # Utiliser pdf2image si disponible, sinon fallback basique
-                try:
-                    from pdf2image import convert_from_bytes
-                    images = convert_from_bytes(buf.read(), dpi=dpi)
-                    img = images[0]
-                except ImportError:
-                    # Fallback: image blanche avec texte indicatif
-                    img = Image.new("RGB", (595, 842), "white")
-                    draw = ImageDraw.Draw(img)
-                    draw.text((200, 400), f"Page {i+1}", fill="black")
-
-                img_buf = io.BytesIO()
-                if img.mode in ("RGBA", "P"):
-                    img = img.convert("RGB")
-                img.save(img_buf, format="JPEG", quality=85)
-                zf.writestr(f"page_{i+1:03d}.jpg", img_buf.getvalue())
-
+    images = convert_from_path(str(input_path), dpi=dpi)
+    with zipfile.ZipFile(zip_path, "w") as zf:
+        for i, img in enumerate(images):
+            if img.mode in ("RGBA", "P"):
+                img = img.convert("RGB")
+            buf = io.BytesIO()
+            img.save(buf, format="JPEG", quality=85)
+            zf.writestr(f"page_{i+1:03d}.jpg", buf.getvalue())
     return zip_path
 
 
@@ -162,32 +142,58 @@ def rotate_pdf(input_path: Path, output_path: Path, angle: int = 90, pages: str 
 # ---- Filigrane PDF ----
 def watermark_pdf(input_path: Path, output_path: Path, text: str = "CONFIDENTIEL", opacity: float = 0.3) -> Path:
     output_path = output_path.with_suffix(".pdf")
-
-    # Créer une page de filigrane
-    wm_img = Image.new("RGBA", (595, 842), (255, 255, 255, 0))
-    draw = ImageDraw.Draw(wm_img)
-
-    # Texte diagonal
-    try:
-        font = ImageFont.truetype("arial.ttf", 60)
-    except Exception:
-        font = ImageFont.load_default()
-
-    alpha = int(255 * opacity)
-    draw.text((100, 380), text, fill=(128, 128, 128, alpha), font=font)
-
-    wm_buf = io.BytesIO()
-    wm_img.convert("RGB").save(wm_buf, format="PDF")
-    wm_buf.seek(0)
-
-    wm_pdf = pikepdf.open(wm_buf)
-    wm_page = wm_pdf.pages[0]
+    # Couleur grise avec opacité simulée (PDF ne supporte pas l'alpha sur le texte directement)
+    gray = max(0.0, min(1.0, 1.0 - opacity))
 
     with pikepdf.open(input_path) as pdf:
         for page in pdf.pages:
-            page.add_overlay(wm_page)
-        pdf.save(output_path, compress_streams=True)
+            mediabox = page.mediabox
+            w = float(mediabox[2])
+            h = float(mediabox[3])
+            cx = w / 2
+            cy = h / 2
 
+            # Contenu PDF brut : texte diagonal centré
+            watermark_stream = (
+                f"q\n"
+                f"{gray:.2f} {gray:.2f} {gray:.2f} rg\n"
+                f"BT\n"
+                f"/Helvetica 48 Tf\n"
+                f"{gray:.2f} {gray:.2f} {gray:.2f} rg\n"
+                f"1 0 0 1 {cx:.1f} {cy:.1f} Tm\n"
+                f"-0.5 0.866 -0.866 -0.5 {cx:.1f} {cy:.1f} Tm\n"
+                f"({text}) Tj\n"
+                f"ET\n"
+                f"Q\n"
+            ).encode()
+
+            # Ajouter la police Helvetica aux ressources de la page si absente
+            if "/Resources" not in page:
+                page["/Resources"] = pikepdf.Dictionary()
+            resources = page["/Resources"]
+            if "/Font" not in resources:
+                resources["/Font"] = pikepdf.Dictionary()
+            if "/Helvetica" not in resources["/Font"]:
+                resources["/Font"]["/Helvetica"] = pikepdf.Dictionary(
+                    Type=pikepdf.Name("/Font"),
+                    Subtype=pikepdf.Name("/Type1"),
+                    BaseFont=pikepdf.Name("/Helvetica"),
+                )
+
+            # Créer le stream filigrane et l'ajouter comme overlay
+            wm_stream = pikepdf.Stream(pdf, watermark_stream)
+            # Encapsuler le contenu existant et ajouter le filigrane
+            existing = page.get("/Contents")
+            if existing is None:
+                page["/Contents"] = wm_stream
+            else:
+                if isinstance(existing, pikepdf.Array):
+                    existing.append(wm_stream)
+                    page["/Contents"] = existing
+                else:
+                    page["/Contents"] = pikepdf.Array([existing, wm_stream])
+
+        pdf.save(output_path, compress_streams=True)
     return output_path
 
 
