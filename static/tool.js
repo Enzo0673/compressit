@@ -72,13 +72,81 @@ function initTool(config) {
     const type = detectType(file.name);
     const preview = document.getElementById('filePreview');
     if (preview) {
-      preview.innerHTML = `
-        <span class="file-icon">${FILE_ICONS[type] || '📄'}</span>
-        <div class="file-info">
-          <div class="file-name">${file.name}</div>
-          <div class="file-size">${formatBytes(file.size)}</div>
-        </div>
-      `;
+      if (type === 'image') {
+        const url = URL.createObjectURL(file);
+        const img = new window.Image();
+        img.onload = () => {
+          preview.innerHTML = `
+            <img src="${url}" alt="${file.name}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:var(--shadow)" />
+            <div class="file-info" style="margin-top:8px">
+              <div class="file-name">${file.name}</div>
+              <div class="file-size">${formatBytes(file.size)} — ${img.naturalWidth}×${img.naturalHeight} px</div>
+            </div>
+          `;
+        };
+        img.src = url;
+      } else if (type === 'video') {
+        const url = URL.createObjectURL(file);
+        const video = document.createElement('video');
+        video.src = url;
+        video.preload = 'metadata';
+        video.onloadedmetadata = () => {
+          video.currentTime = Math.min(1, video.duration * 0.1);
+        };
+        video.onseeked = () => {
+          const canvas = document.createElement('canvas');
+          canvas.width = video.videoWidth;
+          canvas.height = video.videoHeight;
+          canvas.getContext('2d').drawImage(video, 0, 0);
+          const dur = video.duration ? `${Math.floor(video.duration / 60)}m${Math.floor(video.duration % 60)}s` : '';
+          preview.innerHTML = `
+            <img src="${canvas.toDataURL()}" alt="aperçu" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:var(--shadow)" />
+            <div class="file-info" style="margin-top:8px">
+              <div class="file-name">${file.name}</div>
+              <div class="file-size">${formatBytes(file.size)}${dur ? ' — ' + dur : ''}</div>
+            </div>
+          `;
+          URL.revokeObjectURL(url);
+        };
+      } else if (type === 'pdf') {
+        const url = URL.createObjectURL(file);
+        file.arrayBuffer().then(buf => {
+          if (typeof pdfjsLib === 'undefined') {
+            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
+            return;
+          }
+          pdfjsLib.getDocument({ data: buf }).promise.then(pdf => {
+            pdf.getPage(1).then(page => {
+              const vp = page.getViewport({ scale: 0.4 });
+              const canvas = document.createElement('canvas');
+              canvas.width = vp.width; canvas.height = vp.height;
+              page.render({ canvasContext: canvas.getContext('2d'), viewport: vp }).promise.then(() => {
+                preview.innerHTML = '';
+                canvas.style.cssText = 'border-radius:6px;box-shadow:var(--shadow);max-width:120px;height:auto;display:block';
+                const info = document.createElement('div');
+                info.className = 'file-info';
+                info.style.marginTop = '8px';
+                info.innerHTML = `<div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)} — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}</div>`;
+                preview.style.flexDirection = 'column';
+                preview.style.alignItems = 'flex-start';
+                preview.appendChild(canvas);
+                preview.appendChild(info);
+              });
+            });
+          }).catch(() => {
+            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
+          });
+          URL.revokeObjectURL(url);
+        });
+      } else {
+        preview.innerHTML = `
+          <span class="file-icon">${FILE_ICONS[type] || '📄'}</span>
+          <div class="file-info">
+            <div class="file-name">${file.name}</div>
+            <div class="file-size">${formatBytes(file.size)}</div>
+          </div>
+        `;
+      }
     }
     showPanel(configPanel);
   }

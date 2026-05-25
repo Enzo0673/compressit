@@ -92,7 +92,15 @@
 
     function loadFile(file) {
       currentFile = file;
-      document.getElementById('filePreview').innerHTML = `<span class="file-icon">🖼️</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
+      (() => {
+        const url = URL.createObjectURL(file);
+        const img = new Image();
+        img.onload = () => {
+          document.getElementById('filePreview').style.cssText = 'display:flex;flex-direction:column;align-items:flex-start;gap:8px';
+          document.getElementById('filePreview').innerHTML = `<img src="${url}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:0 2px 8px rgba(0,0,0,.12)" /><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)} — ${img.naturalWidth}×${img.naturalHeight} px</div></div>`;
+        };
+        img.src = url;
+      })();
       showPanel(previewPanel);
     }
 

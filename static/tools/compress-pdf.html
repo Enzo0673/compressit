@@ -48,6 +48,8 @@
     </main>
     <footer class="footer">100% local &mdash; vos fichiers ne quittent jamais votre machine</footer>
   </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+  <script>pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';</script>
   <script src="/static/tool.js"></script>
   <script>initTool({ toolType: 'compress', fileType: 'pdf' }); if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');</script>
 </body>
