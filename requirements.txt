@@ -14,6 +14,9 @@ Pillow>=10.3.0
 # Compression PDF
 pikepdf>=8.15.0
 
+# Extraction texte PDF
+pdfminer.six>=20231228
+
 # PDF vers JPG (nécessite poppler-utils installé sur le système)
 pdf2image>=1.17.0
 

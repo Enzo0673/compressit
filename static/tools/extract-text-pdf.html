@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Extraire texte PDF — CompressIt</title>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-32.png" />
+  <style>
+    .text-result { display:flex; flex-direction:column; gap:16px; width:100%; }
+    .page-block { background:var(--surface-2); border:1.5px solid var(--border); border-radius:12px; padding:16px; }
+    .page-label { font-size:0.75rem; font-weight:600; color:var(--text-muted); text-transform:uppercase; letter-spacing:.05em; margin-bottom:8px; }
+    .page-text { font-size:0.9rem; color:var(--text); white-space:pre-wrap; word-break:break-word; line-height:1.6; max-height:200px; overflow-y:auto; }
+    .scanned-warning { background:#fef3c7; border:1.5px solid #f59e0b; border-radius:12px; padding:16px; color:#78350f; font-size:0.9rem; text-align:center; }
+    .btn-copy { background:var(--primary); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-size:0.9rem; font-weight:600; cursor:pointer; transition:opacity .15s; }
+    .btn-copy:hover { opacity:.85; }
+    .copy-row { display:flex; gap:10px; align-items:center; }
+    .copy-confirm { font-size:0.85rem; color:var(--success); display:none; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="logo"><a href="/" class="logo-link"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M8 16L14 10L20 16L26 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 22L14 16L20 22L26 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/></svg><span class="logo-text">CompressIt</span></a></div>
+      <a href="/" class="btn-back">← Tous les outils</a>
+    </header>
+    <div class="tool-hero"><span class="tool-hero-icon">📝</span><div><h1 class="tool-hero-title">Extraire texte PDF</h1><p class="tool-hero-sub">Extraire le texte d'un PDF natif (factures, contrats, rapports…)</p></div></div>
+    <main class="main">
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 8V32M24 8L16 16M24 8L32 16" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 36H40" stroke="#6366f1" stroke-width="3" stroke-linecap="round"/></svg></div>
+        <p class="drop-title">Glissez votre PDF ici</p><p class="drop-sub">ou</p>
+        <label class="btn-browse" for="fileInput">Parcourir</label>
+        <input type="file" id="fileInput" hidden accept=".pdf" />
+      </div>
+      <div class="progress-panel" id="progressPanel" hidden><div class="progress-spinner"></div><p class="progress-label">Extraction en cours…</p></div>
+      <div class="result-panel" id="resultPanel" hidden>
+        <div class="result-badge" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">✓ Texte extrait</div>
+        <div class="result-stats" id="resultStats"></div>
+        <div class="copy-row">
+          <button class="btn-copy" id="btnCopy">Copier tout le texte</button>
+          <span class="copy-confirm" id="copyConfirm">✓ Copié !</span>
+          <button class="btn-reset" id="btnReset">Nouveau</button>
+        </div>
+        <div class="text-result" id="textResult"></div>
+      </div>
+      <div class="error-panel" id="errorPanel" hidden><div class="error-icon">!</div><p class="error-msg" id="errorMsg"></p><button class="btn-reset" id="btnErrorReset">Réessayer</button></div>
+    </main>
+    <footer class="footer">100% local &mdash; vos fichiers ne quittent jamais votre machine</footer>
+  </div>
+  <script src="/static/utils.js"></script>
+  <script>
+    let allText = '';
+    const panels = ['dropZone','progressPanel','resultPanel','errorPanel'].map(id => document.getElementById(id));
+    function showPanel(p) { panels.forEach(x => { x.hidden = x !== p; x.style.display = x === p ? '' : 'none'; }); }
+
+    const dropZone = panels[0], fileInput = document.getElementById('fileInput');
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) process(e.dataTransfer.files[0]); });
+    dropZone.addEventListener('click', e => { if (!e.target.closest('label')) fileInput.click(); });
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) process(fileInput.files[0]); });
+
+    async function process(f) {
+      const err = checkFileSize(f, 'pdf');
+      if (err) { document.getElementById('errorMsg').textContent = err; showPanel(panels[3]); return; }
+      showPanel(panels[1]);
+      const fd = new FormData();
+      fd.append('file', f);
+      try {
+        const res = await fetch('/pdf/extract-text', { method: 'POST', body: fd });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.detail || 'Erreur serveur');
+
+        const textResult = document.getElementById('textResult');
+        textResult.innerHTML = '';
+        allText = '';
+
+        if (data.is_scanned) {
+          textResult.innerHTML = '<div class="scanned-warning">⚠️ Ce PDF semble être un scan (image). L\'extraction de texte n\'est possible que sur les PDFs avec une couche texte native.</div>';
+          document.getElementById('btnCopy').style.display = 'none';
+        } else {
+          document.getElementById('btnCopy').style.display = '';
+          data.pages.forEach((text, i) => {
+            allText += text + '\n\n';
+            const block = document.createElement('div');
+            block.className = 'page-block';
+            const label = document.createElement('div');
+            label.className = 'page-label';
+            label.textContent = `Page ${i + 1}`;
+            const content = document.createElement('div');
+            content.className = 'page-text';
+            content.textContent = text || '(page vide)';
+            block.appendChild(label);
+            block.appendChild(content);
+            textResult.appendChild(block);
+          });
+        }
+
+        document.getElementById('resultStats').innerHTML =
+          `<div class="stat-item"><span class="stat-label">Pages</span><span class="stat-value">${data.page_count}</span></div>` +
+          (data.is_scanned ? '' : `<div class="stat-item"><span class="stat-label">Caractères</span><span class="stat-value">${data.total_chars.toLocaleString()}</span></div>`);
+
+        showPanel(panels[2]);
+      } catch(err) { document.getElementById('errorMsg').textContent = err.message; showPanel(panels[3]); }
+    }
+
+    document.getElementById('btnCopy').addEventListener('click', () => {
+      navigator.clipboard.writeText(allText.trim()).then(() => {
+        const confirm = document.getElementById('copyConfirm');
+        confirm.style.display = 'inline';
+        setTimeout(() => confirm.style.display = 'none', 2000);
+      });
+    });
+
+    function reset() { allText = ''; showPanel(panels[0]); }
+    document.getElementById('btnReset').addEventListener('click', reset);
+    document.getElementById('btnErrorReset').addEventListener('click', reset);
+    showPanel(panels[0]);
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
+  </script>
+  <script src="/static/banner.js"></script>
+</body>
+</html>

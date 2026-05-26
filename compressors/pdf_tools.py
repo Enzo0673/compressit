@@ -19,6 +19,7 @@ import pikepdf
 from PIL import Image
 import io
 import zipfile
+import re
 
 
 # ---- Fusionner PDF ----
@@ -473,3 +474,37 @@ def _is_blank_page(page) -> bool:
         return len(stripped) == 0
     except Exception:
         return False
+
+
+# ---- Extraire texte PDF ----
+
+def extract_pdf_text(input_path: str) -> dict:
+    """
+    Extrait le texte d'un PDF natif (avec couche texte).
+    Retourne le texte par page + détection PDF scanné.
+    """
+    from pdfminer.high_level import extract_pages
+    from pdfminer.layout import LTTextContainer, LTPage
+
+    pages_text = []
+    total_chars = 0
+
+    try:
+        for page_layout in extract_pages(input_path):
+            page_text = []
+            for element in page_layout:
+                if isinstance(element, LTTextContainer):
+                    t = element.get_text()
+                    page_text.append(t)
+                    total_chars += len(t.strip())
+            pages_text.append("".join(page_text).strip())
+    except Exception as e:
+        raise ValueError(f"Impossible de lire le PDF : {e}")
+
+    is_scanned = total_chars < 50
+    return {
+        "pages": pages_text,
+        "page_count": len(pages_text),
+        "total_chars": total_chars,
+        "is_scanned": is_scanned,
+    }

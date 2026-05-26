@@ -28,7 +28,7 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 
 ## Outils disponibles
 
-### PDF (11 outils)
+### PDF (13 outils)
 | Outil | Description |
 |---|---|
 | Compresser PDF | Réduire le poids d'un PDF |
@@ -42,6 +42,8 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 | Supprimer pages | Retirer des pages d'un PDF |
 | Déverrouiller PDF | Supprimer la protection par mot de passe |
 | Protéger PDF | Ajouter un mot de passe |
+| Réparer PDF | Reconstruire un PDF corrompu |
+| Extraire texte | Copier le texte d'un PDF natif |
 
 ### Images (5 outils)
 | Outil | Description |

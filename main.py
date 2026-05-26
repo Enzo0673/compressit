@@ -34,7 +34,7 @@ from compressors.archive import compress_archive
 from compressors.pdf_tools import (
     merge_pdfs, split_pdf, pdf_to_jpg, jpg_to_pdf,
     rotate_pdf, rotate_pdf_map, watermark_pdf, add_page_numbers,
-    delete_pages, unlock_pdf, protect_pdf, repair_pdf,
+    delete_pages, unlock_pdf, protect_pdf, repair_pdf, extract_pdf_text,
 )
 from compressors.image_tools import resize_image, convert_image, crop_image, rotate_image
 
@@ -637,6 +637,22 @@ async def pdf_repair(
     except Exception as e:
         logger.error("%s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Extraire texte PDF ----
+@app.post("/pdf/extract-text")
+async def pdf_extract_text(file: UploadFile = File(...)):
+    uid = uuid.uuid4().hex
+    input_path = UPLOAD_DIR / f"{uid}_input.pdf"
+    try:
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
+        result = extract_pdf_text(str(input_path))
+        return result
+    except Exception as e:
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors de l'extraction du texte")
     finally:
         input_path.unlink(missing_ok=True)
 
