@@ -100,6 +100,26 @@ def _cleanup_outputs():
 
 app = FastAPI(title="CompressIt", version="1.0.0")
 
+# Rate limiting — actif uniquement sur la version en ligne (Render injecte la var RENDER)
+_IS_LOCAL = os.environ.get("RENDER") is None
+_rate_buckets: dict = {}  # {ip: [timestamp, ...]}
+_RATE_LIMIT = 20          # requêtes max
+_RATE_WINDOW = 60         # par fenêtre de 60s
+_PROCESSING_PATHS = ("/compress", "/pdf/", "/image/", "/video/", "/download/")
+
+@app.middleware("http")
+async def rate_limit_middleware(request: Request, call_next):
+    if not _IS_LOCAL and any(request.url.path.startswith(p) for p in _PROCESSING_PATHS):
+        ip = request.client.host if request.client else "unknown"
+        now = time.time()
+        bucket = [t for t in _rate_buckets.get(ip, []) if now - t < _RATE_WINDOW]
+        if len(bucket) >= _RATE_LIMIT:
+            from starlette.responses import JSONResponse
+            return JSONResponse({"detail": "Trop de requêtes — réessayez dans une minute."}, status_code=429)
+        bucket.append(now)
+        _rate_buckets[ip] = bucket
+    return await call_next(request)
+
 @app.exception_handler(StarletteHTTPException)
 async def http_exception_handler(request: Request, exc: StarletteHTTPException):
     if exc.status_code == 404:
