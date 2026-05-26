@@ -28,7 +28,7 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 
 ## Outils disponibles
 
-### PDF (13 outils)
+### PDF (14 outils)
 | Outil | Description |
 |---|---|
 | Compresser PDF | Réduire le poids d'un PDF |
@@ -44,6 +44,7 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 | Protéger PDF | Ajouter un mot de passe |
 | Réparer PDF | Reconstruire un PDF corrompu |
 | Extraire texte | Copier le texte d'un PDF natif |
+| Word / Excel → PDF | Convertir .docx, .xlsx, .pptx en PDF (nécessite LibreOffice) |
 
 ### Images (5 outils)
 | Outil | Description |

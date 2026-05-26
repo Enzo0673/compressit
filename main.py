@@ -14,6 +14,8 @@ import mimetypes
 import threading
 import webbrowser
 import time
+import shutil
+import subprocess
 from pathlib import Path
 from typing import List
 
@@ -81,6 +83,23 @@ MAX_SIZE = {
     "archive": 200 * 1024 * 1024,  # 200 MB
 }
 MAX_SIZE_DEFAULT = 200 * 1024 * 1024
+
+# Détection LibreOffice pour la conversion Word/Excel → PDF
+def _find_libreoffice() -> str | None:
+    candidates = [
+        "libreoffice", "soffice",
+        r"C:\Program Files\LibreOffice\program\soffice.exe",
+        r"C:\Program Files (x86)\LibreOffice\program\soffice.exe",
+        "/usr/bin/libreoffice", "/usr/bin/soffice",
+        "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    ]
+    for c in candidates:
+        if shutil.which(c) or Path(c).exists():
+            return c
+    return None
+
+_LIBREOFFICE = _find_libreoffice()
+OFFICE_AVAILABLE = _LIBREOFFICE is not None
 
 # TTL des fichiers output (secondes)
 OUTPUT_TTL = 3600  # 1 heure
@@ -655,6 +674,53 @@ async def pdf_extract_text(file: UploadFile = File(...)):
         raise HTTPException(status_code=500, detail="Erreur lors de l'extraction du texte")
     finally:
         input_path.unlink(missing_ok=True)
+
+
+# ---- Word / Excel / PowerPoint → PDF ----
+@app.get("/office/status")
+async def office_status():
+    return {"available": OFFICE_AVAILABLE}
+
+@app.post("/office/to-pdf")
+async def office_to_pdf(file: UploadFile = File(...)):
+    if not OFFICE_AVAILABLE:
+        raise HTTPException(status_code=503, detail="LibreOffice non disponible sur ce serveur.")
+    ext = Path(file.filename or "file").suffix.lower()
+    allowed = {".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp"}
+    if ext not in allowed:
+        raise HTTPException(status_code=400, detail="Format non supporté.")
+    uid = uuid.uuid4().hex
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    output_dir = OUTPUT_DIR / uid
+    try:
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
+        output_dir.mkdir(exist_ok=True)
+        result = subprocess.run(
+            [_LIBREOFFICE, "--headless", "--convert-to", "pdf", "--outdir", str(output_dir), str(input_path)],
+            capture_output=True, text=True, timeout=120
+        )
+        if result.returncode != 0:
+            raise ValueError(result.stderr or "Échec de la conversion")
+        pdf_files = list(output_dir.glob("*.pdf"))
+        if not pdf_files:
+            raise ValueError("Aucun PDF généré")
+        output_path = pdf_files[0]
+        final_path = OUTPUT_DIR / f"{uid}_output.pdf"
+        output_path.rename(final_path)
+        stem = Path(file.filename).stem
+        return {
+            "success": True,
+            "download_id": uid + "_output",
+            "output_filename": stem + ".pdf",
+        }
+    except Exception as e:
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors de la conversion")
+    finally:
+        input_path.unlink(missing_ok=True)
+        if output_dir.exists():
+            import shutil as _shutil
+            _shutil.rmtree(output_dir, ignore_errors=True)
 
 
 # ---- Redimensionner image ----
