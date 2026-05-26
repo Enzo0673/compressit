@@ -34,3 +34,7 @@ outputs/
 # OS
 .DS_Store
 Thumbs.db
+
+# Scripts temporaires générés
+_patch_*.py
+compressit.spec
