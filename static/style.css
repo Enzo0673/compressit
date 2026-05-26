@@ -408,7 +408,7 @@ body.home-body {
 /* ---- Tools grid ---- */
 .tools-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
   gap: 12px;
 }
 
@@ -562,11 +562,6 @@ body.home-body {
   .expert-grid { grid-template-columns: 1fr; }
   .result-stats { gap: 20px; }
   .drop-zone, .config-panel, .progress-panel, .result-panel, .error-panel { padding: 24px 20px; }
-  .tools-grid { grid-template-columns: repeat(2, 1fr); }
   .hero-title { font-size: 1.6rem; }
   .home-tagline { display: none; }
-}
-
-@media (max-width: 768px) and (min-width: 481px) {
-  .tools-grid { grid-template-columns: repeat(3, 1fr); }
 }

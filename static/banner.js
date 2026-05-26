@@ -1,6 +1,7 @@
 /* Bannière affichée uniquement sur la version en ligne (non-localhost) */
 (function () {
-  const isLocal = ['localhost', '127.0.0.1', '::1'].includes(location.hostname);
+  const h = location.hostname;
+  const isLocal = h === '' || h === 'localhost' || h === '127.0.0.1' || h === '::1' || h.startsWith('192.168.') || h.startsWith('10.');
   if (isLocal) return;
   if (sessionStorage.getItem('banner-dismissed')) return;
 
