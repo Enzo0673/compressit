@@ -72,10 +72,15 @@
     if (dragCounter <= 0) { dragCounter = 0; overlay.classList.remove('active'); }
   });
 
+  // Intercepter sur window pour bloquer le comportement natif d'Edge/Chrome
+  window.addEventListener('dragover', e => e.preventDefault(), false);
+  window.addEventListener('drop', e => e.preventDefault(), false);
+
   document.addEventListener('dragover', e => e.preventDefault());
 
   document.addEventListener('drop', e => {
     e.preventDefault();
+    e.stopPropagation();
     dragCounter = 0;
     overlay.classList.remove('active');
     const file = e.dataTransfer.files[0];
