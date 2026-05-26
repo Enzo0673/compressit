@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import uuid
+import zipfile
 import hashlib
 import logging
 import mimetypes
@@ -32,7 +33,7 @@ import uvicorn
 
 from compressors.image import compress_image
 from compressors.pdf import compress_pdf
-from compressors.video import compress_video, trim_video, resize_video
+from compressors.video import compress_video, trim_video, resize_video, FFMPEG_AVAILABLE as _FFMPEG_AVAILABLE
 from compressors.archive import compress_archive
 from compressors.pdf_tools import (
     merge_pdfs, split_pdf, pdf_to_jpg, jpg_to_pdf,
@@ -104,6 +105,15 @@ OFFICE_AVAILABLE = _LIBREOFFICE is not None
 
 # TTL des fichiers output (secondes)
 OUTPUT_TTL = 3600  # 1 heure
+_APP_START = time.time()
+
+
+def _dir_size_mb(path: Path) -> float:
+    try:
+        total = sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+        return round(total / (1024 * 1024), 2)
+    except Exception:
+        return 0.0
 
 
 def _cleanup_outputs():
@@ -466,6 +476,76 @@ async def compress_progress(uid: str):
         media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+
+# ---- Compression par lot ----
+MAX_BATCH_FILES = 20
+
+@app.post("/compress/batch")
+async def compress_batch(
+    files: List[UploadFile] = File(...),
+    level: str = Form("standard"),
+):
+    if not files or len(files) > MAX_BATCH_FILES:
+        raise HTTPException(status_code=400, detail=f"1 à {MAX_BATCH_FILES} fichiers requis")
+    if level not in {"light", "standard", "aggressive"}:
+        raise HTTPException(status_code=400, detail="Niveau de compression invalide")
+
+    batch_uid = uuid.uuid4().hex
+    input_paths = []
+    output_paths = []
+
+    try:
+        for i, f in enumerate(files):
+            uid = uuid.uuid4().hex
+            mime = f.content_type or mimetypes.guess_type(f.filename)[0] or ""
+            file_type = detect_type(f.filename, mime)
+            max_bytes = MAX_SIZE.get(file_type, MAX_SIZE_DEFAULT)
+            ext = Path(f.filename).suffix.lower()
+            in_path = UPLOAD_DIR / f"{uid}_input{ext}"
+            out_path = OUTPUT_DIR / f"{uid}_output{ext}"
+            await _save_upload(f, in_path, max_bytes)
+            input_paths.append(in_path)
+
+            if file_type == "image":
+                out_path = compress_image(in_path, out_path, level)
+            elif file_type == "pdf":
+                out_path = compress_pdf(in_path, out_path, level)
+            elif file_type == "video":
+                loop = asyncio.get_event_loop()
+                captured_in, captured_out = in_path, out_path
+                out_path = await loop.run_in_executor(
+                    None, lambda ip=captured_in, op=captured_out: compress_video(ip, op, level)
+                )
+            else:
+                out_path = compress_archive(in_path, out_path, level)
+            output_paths.append(out_path)
+
+        zip_path = OUTPUT_DIR / f"{batch_uid}_output.zip"
+        with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED, compresslevel=6) as zf:
+            for i, (orig_file, out_p) in enumerate(zip(files, output_paths)):
+                stem = Path(orig_file.filename).stem
+                arcname = f"{i+1}_{stem}_compressed{out_p.suffix}"
+                zf.write(out_p, arcname)
+
+        return {
+            "success": True,
+            "download_id": batch_uid,
+            "output_filename": "batch_compressed.zip",
+            "count": len(files),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement")
+    finally:
+        for p in input_paths:
+            p.unlink(missing_ok=True)
+        for p in output_paths:
+            p.unlink(missing_ok=True)
 
 
 # ---- Fusionner PDF ----
@@ -941,7 +1021,25 @@ async def cleanup(uid: str):
 
 @app.get("/health")
 async def health():
-    return {"status": "ok", "version": "1.0.0"}
+    return {"status": "ok", "version": "1.1.0"}
+
+
+@app.get("/status")
+async def status():
+    return {
+        "version": "1.1.0",
+        "ffmpeg": _FFMPEG_AVAILABLE,
+        "libreoffice": OFFICE_AVAILABLE,
+        "uptime_seconds": round(time.time() - _APP_START, 1),
+        "uploads_dir_mb": _dir_size_mb(UPLOAD_DIR),
+        "outputs_dir_mb": _dir_size_mb(OUTPUT_DIR),
+    }
+
+
+@app.get("/status-page", response_class=HTMLResponse)
+async def status_page_route():
+    path = BASE_DIR / "static" / "status.html"
+    return HTMLResponse(content=path.read_text(encoding="utf-8"))
 
 
 if __name__ == "__main__":

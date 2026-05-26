@@ -1,0 +1,225 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Compression en lot — CompressIt</title>
+  <meta name="description" content="Compressez plusieurs fichiers en une seule fois — images, PDF, vidéos, archives." />
+  <meta property="og:type" content="website" />
+  <meta property="og:url" content="https://compressit-w0ro.onrender.com/tool/compress-batch" />
+  <meta property="og:title" content="Compression en lot — CompressIt" />
+  <meta property="og:description" content="Compressez jusqu'à 20 fichiers simultanément et téléchargez un ZIP." />
+  <meta property="og:image" content="https://compressit-w0ro.onrender.com/static/icons/icon-512.png" />
+  <meta name="twitter:card" content="summary" />
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+  <link rel="manifest" href="/manifest.json" />
+  <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
+  <script defer src="https://cloud.umami.is/script.js" data-website-id="d13c5acb-0540-425c-bc8f-6eacb07fc47a"></script>
+</head>
+<body>
+  <div class="app" style="max-width:640px">
+    <header class="header">
+      <div class="logo"><a href="/" class="logo-link"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M8 16L14 10L20 16L26 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 22L14 16L20 22L26 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/></svg><span class="logo-text">CompressIt</span></a></div>
+      <a href="/" class="btn-back">← Tous les outils</a>
+      <button class="btn-theme" title="Thème sombre/clair" onclick="window.__theme.toggle(); this.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙'">🌙</button>
+    </header>
+
+    <div class="tool-hero">
+      <span class="tool-hero-icon">📂</span>
+      <div>
+        <h1 class="tool-hero-title">Compression en lot</h1>
+        <p class="tool-hero-sub">Jusqu'à 20 fichiers — images, PDF, vidéos, archives</p>
+      </div>
+    </div>
+
+    <!-- Drop zone -->
+    <div class="multi-drop-zone" id="dropZone">
+      <svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 8V32M24 8L16 16M24 8L32 16" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 36H40" stroke="#6366f1" stroke-width="3" stroke-linecap="round"/></svg>
+      <p class="drop-title">Glissez vos fichiers ici</p>
+      <p class="drop-sub">ou</p>
+      <label class="btn-browse" for="fileInput">Parcourir</label>
+      <input type="file" id="fileInput" hidden multiple accept="image/*,.pdf,video/*,.zip,.tar,.gz,.bz2,.7z,.rar,.zst,.xz" />
+      <p class="drop-formats">Images · PDF · Vidéos · Archives — max 20 fichiers</p>
+    </div>
+
+    <!-- File list -->
+    <div class="file-list-panel" id="fileListPanel" hidden>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px">
+        <p class="section-label">Fichiers sélectionnés <span class="file-count" id="fileCount"></span></p>
+        <label class="btn-add-more" for="fileInputMore">+ Ajouter</label>
+        <input type="file" id="fileInputMore" hidden multiple accept="image/*,.pdf,video/*,.zip,.tar,.gz,.bz2,.7z,.rar,.zst,.xz" />
+      </div>
+      <div class="file-list" id="fileList"></div>
+
+      <div class="level-selector" style="margin-top:20px">
+        <p class="section-label">Niveau de compression</p>
+        <div class="level-buttons">
+          <button class="level-btn" data-level="light"><span class="level-icon">🪶</span><span class="level-name">Léger</span><span class="level-desc">Qualité maximale</span></button>
+          <button class="level-btn active" data-level="standard"><span class="level-icon">⚖️</span><span class="level-name">Standard</span><span class="level-desc">Meilleur compromis</span></button>
+          <button class="level-btn" data-level="aggressive"><span class="level-icon">💪</span><span class="level-name">Agressif</span><span class="level-desc">Poids minimal</span></button>
+        </div>
+      </div>
+
+      <button class="btn-compress" id="btnCompress">
+        <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+        Tout compresser
+      </button>
+    </div>
+
+    <!-- Progress -->
+    <div class="progress-panel" id="progressPanel" hidden>
+      <div class="progress-spinner"></div>
+      <p class="progress-label">Compression en cours…</p>
+      <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar"></div></div>
+      <p class="progress-elapsed"><span id="progressElapsed">0s</span> écoulées</p>
+    </div>
+
+    <!-- Result -->
+    <div class="result-panel" id="resultPanel" hidden>
+      <div class="result-badge" id="resultBadge">✓</div>
+      <p id="resultMsg" style="font-weight:600;font-size:1rem"></p>
+      <div class="result-actions">
+        <a class="btn-download" id="btnDownload" href="#">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3V11M9 11L5 7M9 11L13 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 14H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+          Télécharger le ZIP
+        </a>
+        <button class="btn-reset" id="btnReset">Nouveau lot</button>
+      </div>
+    </div>
+
+    <!-- Error -->
+    <div class="error-panel" id="errorPanel" hidden>
+      <div class="error-icon">!</div>
+      <p class="error-msg" id="errorMsg"></p>
+      <button class="btn-reset" id="btnErrorReset">Réessayer</button>
+    </div>
+
+    <footer class="footer">100% local &mdash; vos fichiers ne quittent jamais votre machine</footer>
+  </div>
+
+  <script src="/static/utils.js"></script>
+  <script>
+    const FILE_ICONS = { image: '🖼️', video: '🎬', pdf: '📄', archive: '📦', default: '📄' };
+    const EXT_TYPE = {
+      jpg:'image',jpeg:'image',png:'image',webp:'image',gif:'image',bmp:'image',tiff:'image',tif:'image',
+      pdf:'pdf',
+      mp4:'video',mov:'video',avi:'video',mkv:'video',webm:'video',
+      zip:'archive','7z':'archive',rar:'archive',gz:'archive',tar:'archive',bz2:'archive',zst:'archive',
+    };
+    function detectType(name) { return EXT_TYPE[name.split('.').pop().toLowerCase()] || 'archive'; }
+    function formatBytes(b) {
+      if (b < 1024) return b + ' o';
+      if (b < 1048576) return (b/1024).toFixed(1) + ' Ko';
+      return (b/1048576).toFixed(2) + ' Mo';
+    }
+
+    let files = [];
+    let selectedLevel = 'standard';
+
+    const dropZone = document.getElementById('dropZone');
+    const fileListPanel = document.getElementById('fileListPanel');
+    const progressPanel = document.getElementById('progressPanel');
+    const resultPanel = document.getElementById('resultPanel');
+    const errorPanel = document.getElementById('errorPanel');
+
+    function showPanel(p) {
+      [dropZone, fileListPanel, progressPanel, resultPanel, errorPanel]
+        .forEach(el => { el.hidden = (el !== p); el.style.display = (el !== p) ? 'none' : ''; });
+    }
+
+    function renderFileList() {
+      const list = document.getElementById('fileList');
+      document.getElementById('fileCount').textContent = `(${files.length}/20)`;
+      list.innerHTML = files.map((f, i) => `
+        <div class="file-list-item">
+          <span class="file-list-icon">${FILE_ICONS[detectType(f.name)] || FILE_ICONS.default}</span>
+          <span class="file-list-name">${escapeHtml(f.name)}</span>
+          <span class="file-list-size">${formatBytes(f.size)}</span>
+          <button class="file-list-remove" data-i="${i}">✕</button>
+        </div>`).join('');
+      list.querySelectorAll('.file-list-remove').forEach(btn =>
+        btn.addEventListener('click', () => { files.splice(+btn.dataset.i, 1); if (files.length) renderFileList(); else showPanel(dropZone); })
+      );
+      showPanel(fileListPanel);
+    }
+
+    function addFiles(newFiles) {
+      const remaining = 20 - files.length;
+      files.push(...Array.from(newFiles).slice(0, remaining));
+      if (files.length) renderFileList();
+    }
+
+    // Drag & drop
+    dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
+    dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); addFiles(e.dataTransfer.files); });
+    document.getElementById('fileInput').addEventListener('change', e => addFiles(e.target.files));
+    document.getElementById('fileInputMore').addEventListener('change', e => addFiles(e.target.files));
+
+    // Level buttons
+    document.querySelectorAll('.level-btn').forEach(btn =>
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.level-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        selectedLevel = btn.dataset.level;
+      })
+    );
+
+    // Compress
+    document.getElementById('btnCompress').addEventListener('click', withButtonLock(document.getElementById('btnCompress'), async () => {
+      if (!files.length) return;
+      showPanel(progressPanel);
+
+      // Progress animation
+      const bar = document.getElementById('progressBar');
+      const elapsed = document.getElementById('progressElapsed');
+      bar.style.width = '0%'; bar.style.transition = 'none';
+      let start = Date.now();
+      const tick = setInterval(() => {
+        const t = (Date.now() - start) / (files.length * 3000);
+        bar.style.width = (95 * (1 - Math.exp(-3 * t))).toFixed(1) + '%';
+        elapsed.textContent = Math.floor((Date.now() - start) / 1000) + 's';
+      }, 80);
+
+      const fd = new FormData();
+      files.forEach(f => fd.append('files', f));
+      fd.append('level', selectedLevel);
+
+      try {
+        const res = await fetch('/compress/batch', { method: 'POST', body: fd });
+        const data = await res.json();
+        clearInterval(tick);
+        bar.style.transition = 'width 0.3s ease'; bar.style.width = '100%';
+        if (!res.ok) throw new Error(data.detail || 'Erreur serveur');
+
+        await new Promise(r => setTimeout(r, 350));
+        document.getElementById('resultBadge').textContent = '✓';
+        document.getElementById('resultMsg').textContent = `${data.count} fichier${data.count > 1 ? 's' : ''} compressé${data.count > 1 ? 's' : ''}`;
+        const btn = document.getElementById('btnDownload');
+        btn.href = `/download/${data.download_id}`;
+        btn.download = data.output_filename;
+        showPanel(resultPanel);
+        setTimeout(() => btn.click(), 400);
+      } catch (err) {
+        clearInterval(tick);
+        document.getElementById('errorMsg').textContent = err.message;
+        showPanel(errorPanel);
+      }
+    }));
+
+    // Reset
+    function reset() { files = []; document.getElementById('fileInput').value = ''; showPanel(dropZone); }
+    document.getElementById('btnReset').addEventListener('click', reset);
+    document.getElementById('btnErrorReset').addEventListener('click', reset);
+
+    // Theme icon sync
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.querySelector('.btn-theme');
+      if (btn) btn.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙';
+    });
+
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
+  </script>
+  <script src="/static/banner.js"></script>
+</body>
+</html>

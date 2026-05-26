@@ -17,8 +17,14 @@ jobs:
         with:
           python-version: '3.11'
 
-      - name: Install dependencies
+      - name: Install system dependencies
+        run: sudo apt-get update -qq && sudo apt-get install -y poppler-utils
+
+      - name: Install Python dependencies
         run: pip install -r requirements.txt
 
-      - name: Run tests
-        run: pytest tests/ -v
+      - name: Run unit tests
+        run: pytest tests/test_compressors.py -v
+
+      - name: Run API tests
+        run: pytest tests/test_api.py -v

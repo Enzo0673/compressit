@@ -23,4 +23,5 @@
   <url><loc>https://compressit-w0ro.onrender.com/tool/compress-video</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
   <url><loc>https://compressit-w0ro.onrender.com/tool/edit-video</loc><changefreq>monthly</changefreq><priority>0.7</priority></url>
   <url><loc>https://compressit-w0ro.onrender.com/tool/compress-archive</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
+  <url><loc>https://compressit-w0ro.onrender.com/tool/compress-batch</loc><changefreq>monthly</changefreq><priority>0.8</priority></url>
 </urlset>

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Statut — CompressIt</title>
+  <script src="/static/theme.js"></script>
+  <link rel="stylesheet" href="/static/style.css" />
+  <style>
+    .status-table { width: 100%; border-collapse: collapse; }
+    .status-table th, .status-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); font-size: .9rem; }
+    .status-table th { font-size: .75rem; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: .5px; }
+    .badge-ok { color: var(--success); font-weight: 700; }
+    .badge-ko { color: var(--error); font-weight: 700; }
+    .refresh-hint { font-size: .75rem; color: var(--text-muted); margin-top: 12px; text-align: center; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <div class="logo">
+        <a href="/" class="logo-link">
+          <svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M8 16L14 10L20 16L26 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 22L14 16L20 22L26 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/></svg>
+          <span class="logo-text">CompressIt</span>
+        </a>
+      </div>
+      <a href="/" class="btn-back">← Tous les outils</a>
+      <button class="btn-theme" title="Thème sombre/clair" onclick="window.__theme.toggle(); this.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙'">🌙</button>
+    </header>
+
+    <div class="tool-hero">
+      <span class="tool-hero-icon">⚙️</span>
+      <div>
+        <h1 class="tool-hero-title">Statut du serveur</h1>
+        <p class="tool-hero-sub">Disponibilité des outils et ressources</p>
+      </div>
+    </div>
+
+    <div class="config-panel" id="statusPanel">
+      <table class="status-table" id="statusTable">
+        <thead><tr><th>Composant</th><th>Valeur</th></tr></thead>
+        <tbody id="statusBody"><tr><td colspan="2" style="color:var(--text-muted)">Chargement…</td></tr></tbody>
+      </table>
+      <p class="refresh-hint" id="refreshHint"></p>
+    </div>
+  </div>
+
+  <script>
+    function fmtUptime(s) {
+      const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = Math.floor(s % 60);
+      return [h && h + 'h', m && m + 'm', sec + 's'].filter(Boolean).join(' ');
+    }
+
+    function render(d) {
+      const rows = [
+        ['Version', d.version],
+        ['FFmpeg', d.ffmpeg ? '<span class="badge-ok">✓ Disponible</span>' : '<span class="badge-ko">✗ Absent</span>'],
+        ['LibreOffice', d.libreoffice ? '<span class="badge-ok">✓ Disponible</span>' : '<span class="badge-ko">✗ Absent</span>'],
+        ['Uptime', fmtUptime(d.uptime_seconds)],
+        ['Uploads en cours', d.uploads_dir_mb + ' Mo'],
+        ['Fichiers en attente', d.outputs_dir_mb + ' Mo'],
+      ];
+      document.getElementById('statusBody').innerHTML = rows
+        .map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`)
+        .join('');
+    }
+
+    async function load() {
+      try {
+        const r = await fetch('/status');
+        const d = await r.json();
+        render(d);
+        document.getElementById('refreshHint').textContent = 'Actualisé à ' + new Date().toLocaleTimeString();
+      } catch {
+        document.getElementById('statusBody').innerHTML = '<tr><td colspan="2" style="color:var(--error)">Erreur de connexion</td></tr>';
+      }
+    }
+
+    load();
+    setInterval(load, 30000);
+
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.querySelector('.btn-theme');
+      if (btn) btn.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙';
+    });
+  </script>
+</body>
+</html>

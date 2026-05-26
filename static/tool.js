@@ -27,6 +27,7 @@ function initTool(config) {
   let currentFile = null;
   let currentDownloadId = null;
   let selectedLevel = 'standard';
+  let _originalBlobUrl = null;
 
   const FILE_ICONS = { image: '🖼️', video: '🎬', pdf: '📄', archive: '📦' };
   const EXT_TYPE = {
@@ -83,6 +84,10 @@ function initTool(config) {
     }
     currentFile = file;
     const type = detectType(file.name);
+    if (type === 'image') {
+      if (_originalBlobUrl) URL.revokeObjectURL(_originalBlobUrl);
+      _originalBlobUrl = URL.createObjectURL(file);
+    }
     const preview = document.getElementById('filePreview');
     if (preview) {
       if (type === 'image') {
@@ -304,12 +309,53 @@ function initTool(config) {
       setTimeout(() => btnDownload.click(), 400);
     }
     showPanel(resultPanel);
+    if (data.file_type === 'image' && _originalBlobUrl) {
+      _renderImageSlider(_originalBlobUrl, `/download/${data.download_id}`);
+    }
   }
 
-  function showError(msg) {
-    const el = document.getElementById('errorMsg');
-    if (el) el.textContent = msg;
-    showPanel(errorPanel);
+  function _renderImageSlider(originalUrl, compressedUrl) {
+    document.getElementById('imageSlider')?.remove();
+    const slider = document.createElement('div');
+    slider.id = 'imageSlider';
+    slider.className = 'image-slider';
+    slider.innerHTML = `
+      <div class="slider-wrap" id="sliderWrap">
+        <img class="slider-img slider-img--compressed" src="${compressedUrl}" alt="Compressé" />
+        <div class="slider-clip" id="sliderClip">
+          <img class="slider-img slider-img--original" src="${originalUrl}" alt="Original" />
+        </div>
+        <div class="slider-divider" id="sliderDivider">
+          <div class="slider-handle">⇔</div>
+        </div>
+      </div>
+      <div class="slider-labels"><span>Original</span><span>Compressé</span></div>
+      <input type="range" class="slider-range" id="sliderRange" min="0" max="100" value="50" />
+    `;
+    const actions = resultPanel.querySelector('.result-actions');
+    resultPanel.insertBefore(slider, actions);
+
+    const range = slider.querySelector('#sliderRange');
+    const clip = slider.querySelector('#sliderClip');
+    const divider = slider.querySelector('#sliderDivider');
+    const wrap = slider.querySelector('#sliderWrap');
+
+    function setPos(pct) {
+      clip.style.width = pct + '%';
+      divider.style.left = pct + '%';
+      range.value = pct;
+    }
+
+    range.addEventListener('input', () => setPos(range.value));
+
+    let dragging = false;
+    divider.addEventListener('pointerdown', e => { dragging = true; divider.setPointerCapture(e.pointerId); });
+    wrap.addEventListener('pointermove', e => {
+      if (!dragging) return;
+      const rect = wrap.getBoundingClientRect();
+      setPos(Math.max(0, Math.min(100, (e.clientX - rect.left) / rect.width * 100)).toFixed(1));
+    });
+    wrap.addEventListener('pointerup', () => { dragging = false; });
   }
 
   // ---- Reset ----
@@ -319,6 +365,8 @@ function initTool(config) {
       currentDownloadId = null;
     }
     currentFile = null;
+    if (_originalBlobUrl) { URL.revokeObjectURL(_originalBlobUrl); _originalBlobUrl = null; }
+    document.getElementById('imageSlider')?.remove();
     if (fileInput) fileInput.value = '';
     showPanel(dropZone);
   }

@@ -53,6 +53,9 @@ def _find_ffmpeg() -> str:
     return None
 
 
+FFMPEG_AVAILABLE = _find_ffmpeg() is not None
+
+
 def compress_video(
     input_path: Path,
     output_path: Path,
