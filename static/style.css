@@ -331,8 +331,7 @@ body {
    ========================================================= */
 
 body.home-body {
-  align-items: flex-start;
-  justify-content: center;
+  display: block;
   padding: 0;
   background: var(--surface-2);
 }
