@@ -608,6 +608,87 @@ body.home-body {
 }
 .home-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+/* ---- Tool picker modal (drag & drop) ---- */
+#tool-picker-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.4);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9998;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+#tool-picker-modal.active { opacity: 1; pointer-events: all; }
+.tool-picker-box {
+  background: var(--surface);
+  border-radius: 20px;
+  padding: 24px;
+  width: 90%;
+  max-width: 520px;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: var(--shadow-lg);
+}
+.tool-picker-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+.tool-picker-filename {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  font-weight: 500;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 80%;
+}
+.tool-picker-close {
+  background: none;
+  border: none;
+  font-size: 1.1rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 4px;
+  line-height: 1;
+}
+.tool-picker-close:hover { color: var(--text); }
+.tool-picker-label {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--text);
+  margin-bottom: 14px;
+}
+.tool-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: 10px;
+}
+.tool-picker-item {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  padding: 14px 12px;
+  background: var(--surface-2);
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  text-decoration: none;
+  color: var(--text);
+  transition: all .15s;
+}
+.tool-picker-item:hover {
+  border-color: var(--primary);
+  background: var(--primary-light);
+}
+.tool-picker-icon { font-size: 1.4rem; }
+.tool-picker-name { font-size: 0.85rem; font-weight: 600; }
+
 /* ---- Responsive ---- */
 @media (max-width: 480px) {
   .expert-grid { grid-template-columns: 1fr; }
