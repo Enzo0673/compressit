@@ -28,6 +28,9 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 
 ## Outils disponibles
 
+### Multi-fichiers
+- **Compression en lot** — Compresser jusqu'à 20 fichiers (images + PDF) en une fois, télécharger un ZIP
+
 ### PDF (14 outils)
 | Outil | Description |
 |---|---|
@@ -56,7 +59,7 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 | Rotation / Flip | Faire pivoter ou retourner |
 
 ### Vidéo
-- **Compresser vidéo** — MP4, MOV, AVI, MKV, WebM (codecs H.264 / H.265 / VP9)
+- **Compresser vidéo** — MP4, MOV, AVI, MKV, WebM (codecs H.264 / H.265 / VP9), progression en temps réel
 - **Éditer vidéo** — Découper (trim) et redimensionner
 
 ### Archives
@@ -68,10 +71,13 @@ Double-cliquez sur l'exécutable → l'application s'ouvre dans votre navigateur
 
 Les outils en ligne comme iLovePDF ou Smallpdf envoient vos fichiers sur leurs serveurs. Avec l'app locale, CompressIt tourne entièrement sur votre machine :
 
-- **100% local** — vos fichiers ne transitent jamais par internet
-- **Aucune collecte** — pas de cookies, pas d'analytics, pas de compte requis
+- **100% local** — vos fichiers ne transitent jamais par internet (app locale)
+- **Aucun compte requis** — pas d'inscription, pas de limite de taille
 - **Open source** — le code est auditable
 - **PWA** — installable comme une app, fonctionne hors-ligne
+- **Dark mode** — thème clair/sombre, persisté en localStorage
+- **Comparaison avant/après** — slider interactif sur les images compressées
+- **Téléchargement automatique** — le fichier se télécharge dès la compression terminée
 
 ---
 
@@ -115,12 +121,13 @@ Les builds sont automatisés via GitHub Actions à chaque tag `v*`.
 |---|---|
 | Backend | Python 3, FastAPI, Uvicorn |
 | Images | Pillow |
-| PDF | pikepdf, pdf2image |
-| Vidéo | ffmpeg-python + FFmpeg |
+| PDF | pikepdf, pdf2image, pdfminer.six |
+| Vidéo | ffmpeg-python + FFmpeg (SSE progress) |
 | Archives | zstandard, brotli, lzma, gzip |
 | Frontend | HTML / CSS / JavaScript vanilla |
 | Aperçu PDF | pdf.js (servi en local) |
 | PWA | Service Worker + manifest.json |
+| Analytics | Umami (sans cookie, RGPD) |
 | Build | PyInstaller + GitHub Actions |
 
 ---
