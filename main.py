@@ -235,6 +235,18 @@ async def manifest():
     return FileResponse(path=path, media_type="application/manifest+json")
 
 
+@app.get("/sitemap.xml")
+async def sitemap():
+    path = BASE_DIR / "static" / "sitemap.xml"
+    return FileResponse(path=path, media_type="application/xml")
+
+
+@app.get("/robots.txt")
+async def robots():
+    path = BASE_DIR / "static" / "robots.txt"
+    return FileResponse(path=path, media_type="text/plain")
+
+
 @app.get("/favicon.ico")
 async def favicon():
     path = BASE_DIR / "static" / "favicon.ico"
