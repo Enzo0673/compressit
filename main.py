@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import uuid
+import hashlib
 import logging
 import mimetypes
 import threading
@@ -46,6 +47,20 @@ if getattr(sys, "frozen", False):
 else:
     _BUNDLE_DIR = Path(__file__).parent
     _EXE_DIR = Path(__file__).parent
+
+# Hash de version pour invalider le cache SW automatiquement à chaque déploiement
+def _compute_static_hash() -> str:
+    h = hashlib.md5()
+    static = _BUNDLE_DIR / "static"
+    for f in sorted(static.rglob("*")):
+        if f.is_file() and not f.name.endswith(".pyc"):
+            try:
+                h.update(f.read_bytes())
+            except Exception:
+                pass
+    return h.hexdigest()[:8]
+
+_STATIC_VERSION = _compute_static_hash()
 
 BASE_DIR = _BUNDLE_DIR
 UPLOAD_DIR = _EXE_DIR / "uploads"
@@ -186,13 +201,19 @@ async def favicon():
 @app.get("/service-worker.js")
 async def service_worker():
     sw_path = BASE_DIR / "static" / "service-worker.js"
-    return FileResponse(path=sw_path, media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
+    content = sw_path.read_text(encoding="utf-8")
+    content = re.sub(r"compressit-v\d+", f"compressit-{_STATIC_VERSION}", content)
+    from fastapi.responses import Response
+    return Response(content=content, media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
 
 
 @app.get("/static/service-worker.js")
 async def service_worker_static():
     sw_path = BASE_DIR / "static" / "service-worker.js"
-    return FileResponse(path=sw_path, media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
+    content = sw_path.read_text(encoding="utf-8")
+    content = re.sub(r"compressit-v\d+", f"compressit-{_STATIC_VERSION}", content)
+    from fastapi.responses import Response
+    return Response(content=content, media_type="application/javascript", headers={"Service-Worker-Allowed": "/"})
 
 
 @app.get("/privacy", response_class=HTMLResponse)
