@@ -1,4 +1,4 @@
-const CACHE_NAME = 'compressit-v5';
+const CACHE_NAME = 'compressit-v6';
 const STATIC_ASSETS = [
   '/',
   '/static/style.css',
