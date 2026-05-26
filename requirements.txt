@@ -17,6 +17,9 @@ pikepdf>=8.15.0
 # Extraction texte PDF
 pdfminer.six>=20231228
 
+# Tests
+pytest>=8.0.0
+
 # PDF vers JPG (nécessite poppler-utils installé sur le système)
 pdf2image>=1.17.0
 
