@@ -7,6 +7,7 @@ const STATIC_ASSETS = [
   '/static/pdf-preview.js',
   '/static/utils.js',
   '/static/banner.js',
+  '/static/home.js',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',

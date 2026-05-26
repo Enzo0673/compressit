@@ -560,6 +560,54 @@ body.home-body {
 }
 .online-banner-close:hover { opacity: 1; }
 
+/* ---- Drop overlay (page d'accueil) ---- */
+#drop-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(99,102,241,.12);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .15s;
+}
+#drop-overlay.active { opacity: 1; pointer-events: all; }
+.drop-overlay-inner {
+  background: #fff;
+  border: 2.5px dashed var(--primary);
+  border-radius: 24px;
+  padding: 48px 64px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  box-shadow: var(--shadow-lg);
+}
+.drop-overlay-title { font-size: 1.4rem; font-weight: 700; color: var(--primary); }
+.drop-overlay-sub { font-size: 0.95rem; color: var(--text-muted); }
+
+/* ---- Toast ---- */
+.home-toast {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--text);
+  color: #fff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 0.9rem;
+  opacity: 0;
+  transition: all .3s;
+  z-index: 9998;
+  white-space: nowrap;
+}
+.home-toast.visible { opacity: 1; transform: translateX(-50%) translateY(0); }
+
 /* ---- Responsive ---- */
 @media (max-width: 480px) {
   .expert-grid { grid-template-columns: 1fr; }
