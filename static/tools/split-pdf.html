@@ -65,7 +65,6 @@
     fileInput.addEventListener('change', () => { if (fileInput.files[0]) load(fileInput.files[0]); });
     function load(f) {
       currentFile = f;
-      document.getElementById('filePreview').innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${f.name}</div><div class="file-size">${formatBytes(f.size)}</div></div>`;
       renderPdfPreview(f, document.getElementById('filePreview'));
       showPanel(configPanel);
     }

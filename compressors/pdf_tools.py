@@ -15,7 +15,7 @@ Outils PDF avancés — pikepdf
 from pathlib import Path
 from typing import List
 import pikepdf
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image
 import io
 import zipfile
 
@@ -70,30 +70,47 @@ def split_pdf(input_path: Path, output_dir: Path, ranges: str = None) -> List[Pa
 
 
 def _parse_ranges(ranges_str: str, total: int) -> List[List[int]]:
-    groups = []
-    for part in ranges_str.split(","):
-        part = part.strip()
-        if "-" in part:
-            a, b = part.split("-", 1)
-            groups.append(list(range(int(a)-1, int(b))))
-        else:
-            groups.append([int(part)-1])
-    return groups
+    try:
+        groups = []
+        for part in ranges_str.split(","):
+            part = part.strip()
+            if not part:
+                continue
+            if "-" in part:
+                a, b = part.split("-", 1)
+                a, b = int(a), int(b)
+                if a < 1 or b < a or b > total:
+                    raise ValueError(f"Plage invalide : {a}-{b} (total={total})")
+                groups.append(list(range(a - 1, b)))
+            else:
+                p = int(part)
+                if p < 1 or p > total:
+                    raise ValueError(f"Page invalide : {p} (total={total})")
+                groups.append([p - 1])
+        return groups
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("Format de plages invalide")
 
 
 # ---- PDF vers JPG ----
 def pdf_to_jpg(input_path: Path, output_path: Path, dpi: int = 150) -> Path:
-    """Convertit chaque page en JPG, retourne un ZIP."""
+    """Convertit chaque page en JPG, retourne un ZIP. Streaming page par page."""
     from pdf2image import convert_from_path
+    import os
     zip_path = output_path.with_suffix(".zip")
-    images = convert_from_path(str(input_path), dpi=dpi)
-    with zipfile.ZipFile(zip_path, "w") as zf:
-        for i, img in enumerate(images):
+    thread_count = os.cpu_count() or 2
+    with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+        for i, img in enumerate(convert_from_path(
+            str(input_path), dpi=dpi, thread_count=thread_count,
+        )):
             if img.mode in ("RGBA", "P"):
                 img = img.convert("RGB")
             buf = io.BytesIO()
             img.save(buf, format="JPEG", quality=85)
             zf.writestr(f"page_{i+1:03d}.jpg", buf.getvalue())
+            img.close()
     return zip_path
 
 
@@ -119,24 +136,35 @@ def jpg_to_pdf(input_paths: List[Path], output_path: Path) -> Path:
     return output_path
 
 
+_VALID_ANGLES = {0, 90, 180, 270}
+
+
 # ---- Rotation PDF par map individuelle ----
 def rotate_pdf_map(input_path: Path, output_path: Path, rotation_map: str) -> Path:
     """rotation_map = '1:90,3:180,5:270' (pages 1-indexées)"""
     output_path = output_path.with_suffix(".pdf")
-    mapping = {}
-    for entry in rotation_map.split(','):
-        entry = entry.strip()
-        if ':' in entry:
-            pg, angle = entry.split(':', 1)
-            mapping[int(pg) - 1] = int(angle)
+    try:
+        mapping = {}
+        for entry in rotation_map.split(','):
+            entry = entry.strip()
+            if ':' in entry:
+                pg, angle = entry.split(':', 1)
+                angle_int = int(angle)
+                if angle_int not in _VALID_ANGLES:
+                    raise ValueError(f"Angle invalide : {angle_int}. Valeurs acceptées : 0, 90, 180, 270")
+                mapping[int(pg) - 1] = angle_int
 
-    with pikepdf.open(input_path) as pdf:
-        for idx, angle in mapping.items():
-            if 0 <= idx < len(pdf.pages):
-                page = pdf.pages[idx]
-                current = int(page.get("/Rotate", 0))
-                page["/Rotate"] = (current + angle) % 360
-        pdf.save(output_path, compress_streams=True)
+        with pikepdf.open(input_path) as pdf:
+            for idx, angle in mapping.items():
+                if 0 <= idx < len(pdf.pages):
+                    page = pdf.pages[idx]
+                    current = int(page.get("/Rotate", 0))
+                    page["/Rotate"] = (current + angle) % 360
+            pdf.save(output_path, compress_streams=True)
+    except ValueError:
+        raise
+    except Exception:
+        raise ValueError("Erreur lors de la rotation du PDF")
     return output_path
 
 
@@ -163,6 +191,9 @@ def rotate_pdf(input_path: Path, output_path: Path, angle: int = 90, pages: str 
 # ---- Filigrane PDF ----
 def watermark_pdf(input_path: Path, output_path: Path, text: str = "CONFIDENTIEL", opacity: float = 0.3) -> Path:
     output_path = output_path.with_suffix(".pdf")
+    # Sanitize text: truncate and escape PDF string special chars
+    text = text[:200]
+    text = text.replace("\\", "\\\\").replace("(", "\\(").replace(")", "\\)")
     # Couleur grise avec opacité simulée (PDF ne supporte pas l'alpha sur le texte directement)
     gray = max(0.0, min(1.0, 1.0 - opacity))
 
@@ -225,36 +256,57 @@ def add_page_numbers(input_path: Path, output_path: Path, position: str = "botto
     with pikepdf.open(input_path) as pdf:
         total = len(pdf.pages)
         for i, page in enumerate(pdf.pages):
-            # Créer une image avec le numéro de page
             mediabox = page.mediabox
             w = float(mediabox[2])
             h = float(mediabox[3])
 
-            num_img = Image.new("RGBA", (int(w), int(h)), (255, 255, 255, 0))
-            draw = ImageDraw.Draw(num_img)
-            try:
-                font = ImageFont.truetype("arial.ttf", 16)
-            except Exception:
-                font = ImageFont.load_default()
-
             text = f"{i+1} / {total}"
-            bbox = draw.textbbox((0, 0), text, font=font)
-            tw = bbox[2] - bbox[0]
+            # Estimation largeur texte : ~7pt par caractère à taille 12
+            tw = len(text) * 7
 
             if position == "bottom-center":
-                x, y = (int(w) - tw) // 2, int(h) - 30
+                tx = (w - tw) / 2
+                ty = 20
             elif position == "bottom-right":
-                x, y = int(w) - tw - 20, int(h) - 30
+                tx = w - tw - 20
+                ty = 20
+            else:  # bottom-left
+                tx = 20
+                ty = 20
+
+            # PDF brut : texte direct, sans image
+            num_stream = (
+                f"q\n"
+                f"0 0 0 rg\n"
+                f"BT\n"
+                f"/Helvetica 12 Tf\n"
+                f"{tx:.1f} {ty:.1f} Td\n"
+                f"({text}) Tj\n"
+                f"ET\n"
+                f"Q\n"
+            ).encode()
+
+            if "/Resources" not in page:
+                page["/Resources"] = pikepdf.Dictionary()
+            resources = page["/Resources"]
+            if "/Font" not in resources:
+                resources["/Font"] = pikepdf.Dictionary()
+            if "/Helvetica" not in resources["/Font"]:
+                resources["/Font"]["/Helvetica"] = pikepdf.Dictionary(
+                    Type=pikepdf.Name("/Font"),
+                    Subtype=pikepdf.Name("/Type1"),
+                    BaseFont=pikepdf.Name("/Helvetica"),
+                )
+
+            num_stream_obj = pikepdf.Stream(pdf, num_stream)
+            existing = page.get("/Contents")
+            if existing is None:
+                page["/Contents"] = num_stream_obj
+            elif isinstance(existing, pikepdf.Array):
+                existing.append(num_stream_obj)
+                page["/Contents"] = existing
             else:
-                x, y = 20, int(h) - 30
-
-            draw.text((x, y), text, fill=(0, 0, 0, 200), font=font)
-
-            buf = io.BytesIO()
-            num_img.convert("RGB").save(buf, format="PDF")
-            buf.seek(0)
-            num_pdf = pikepdf.open(buf)
-            page.add_overlay(num_pdf.pages[0])
+                page["/Contents"] = pikepdf.Array([existing, num_stream_obj])
 
         pdf.save(output_path, compress_streams=True)
 

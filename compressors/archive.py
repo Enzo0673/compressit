@@ -65,33 +65,35 @@ def compress_archive(
 
 
 def _compress_raw(input_path: Path, output_path: Path, algo: str, level: int) -> Path:
-    data = input_path.read_bytes()
-
     if algo == "zstd" and HAS_ZSTD:
-        cctx = zstd.ZstdCompressor(level=min(level, 22))
-        compressed = cctx.compress(data)
         out = output_path.with_suffix(".zst")
-        out.write_bytes(compressed)
+        cctx = zstd.ZstdCompressor(level=min(level, 22))
+        with open(input_path, "rb") as fin, open(out, "wb") as fout:
+            cctx.copy_stream(fin, fout)
         return out
 
     if algo == "brotli" and HAS_BROTLI:
-        compressed = brotli.compress(data, quality=min(level, 11))
         out = output_path.with_suffix(".br")
-        out.write_bytes(compressed)
+        data = input_path.read_bytes()
+        out.write_bytes(brotli.compress(data, quality=min(level, 11)))
         return out
 
     if algo == "lzma":
-        preset = min(level, 9)
-        compressed = lzma.compress(data, preset=preset)
         out = output_path.with_suffix(".xz")
-        out.write_bytes(compressed)
+        preset = min(level, 9)
+        with open(input_path, "rb") as fin, lzma.open(out, "wb", preset=preset) as fout:
+            shutil.copyfileobj(fin, fout)
         return out
 
     # Fallback : gzip
     out = output_path.with_suffix(".gz")
-    with gzip.open(out, "wb", compresslevel=min(level, 9)) as f:
-        f.write(data)
+    with open(input_path, "rb") as fin, gzip.open(out, "wb", compresslevel=min(level, 9)) as fout:
+        shutil.copyfileobj(fin, fout)
     return out
+
+
+_MAX_UNCOMPRESSED = 1 * 1024 * 1024 * 1024  # 1 GB
+_MAX_RATIO = 100  # zip bomb threshold
 
 
 def _recompress_zip(input_path: Path, output_path: Path, algo: str, level: int) -> Path:
@@ -99,8 +101,20 @@ def _recompress_zip(input_path: Path, output_path: Path, algo: str, level: int) 
     out = output_path.with_suffix(".zip")
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        # Extraire
+        # Extraire — vérifications anti zip bomb + path traversal
         with zipfile.ZipFile(input_path, "r") as zin:
+            total_uncompressed = 0
+            for info in zin.infolist():
+                # Path traversal
+                if info.filename.startswith("/") or ".." in info.filename:
+                    raise ValueError(f"Chemin suspect dans l'archive : {info.filename}")
+                # Taille totale
+                total_uncompressed += info.file_size
+                if total_uncompressed > _MAX_UNCOMPRESSED:
+                    raise ValueError("Archive trop volumineuse après décompression (limite 1 Go)")
+                # Ratio (zip bomb)
+                if info.compress_size > 0 and info.file_size / info.compress_size > _MAX_RATIO:
+                    raise ValueError("Ratio de compression suspect (possible zip bomb)")
             zin.extractall(tmpdir)
 
         # Ré-archiver avec compression maximale
@@ -131,6 +145,15 @@ def _recompress_tar(input_path: Path, output_path: Path, algo: str, level: int) 
 
     with tempfile.TemporaryDirectory() as tmpdir:
         with tarfile.open(input_path, mode_r) as tin:
+            total_uncompressed = 0
+            for member in tin.getmembers():
+                # Path traversal
+                if member.name.startswith("/") or ".." in member.name:
+                    raise ValueError(f"Chemin suspect dans l'archive : {member.name}")
+                # Taille totale
+                total_uncompressed += member.size
+                if total_uncompressed > _MAX_UNCOMPRESSED:
+                    raise ValueError("Archive trop volumineuse après décompression (limite 1 Go)")
             tin.extractall(tmpdir)
 
         with tarfile.open(out, "w:gz", compresslevel=min(level, 9)) as tout:

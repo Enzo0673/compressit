@@ -5,16 +5,20 @@ Accès : http://localhost:8000
 """
 
 import os
+import re
 import sys
 import uuid
-import shutil
+import logging
 import mimetypes
 import threading
 import webbrowser
+import time
 from pathlib import Path
 from typing import List
 
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
+
+logger = logging.getLogger(__name__)
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -46,6 +50,36 @@ UPLOAD_DIR = _EXE_DIR / "uploads"
 OUTPUT_DIR = _EXE_DIR / "outputs"
 UPLOAD_DIR.mkdir(exist_ok=True)
 OUTPUT_DIR.mkdir(exist_ok=True)
+# Permissions restrictives (Linux/Mac uniquement)
+if os.name != "nt":
+    import stat
+    UPLOAD_DIR.chmod(stat.S_IRWXU)
+    OUTPUT_DIR.chmod(stat.S_IRWXU)
+
+# Limites de taille d'upload par type (en octets)
+MAX_SIZE = {
+    "image":   32 * 1024 * 1024,   # 32 MB
+    "pdf":     32 * 1024 * 1024,   # 32 MB
+    "video":  500 * 1024 * 1024,   # 500 MB
+    "archive": 200 * 1024 * 1024,  # 200 MB
+}
+MAX_SIZE_DEFAULT = 200 * 1024 * 1024
+
+# TTL des fichiers output (secondes)
+OUTPUT_TTL = 3600  # 1 heure
+
+
+def _cleanup_outputs():
+    """Supprime les fichiers output de plus d'1h. Tourne en boucle toutes les 15min."""
+    while True:
+        time.sleep(900)
+        cutoff = time.time() - OUTPUT_TTL
+        for f in OUTPUT_DIR.iterdir():
+            try:
+                if f.is_file() and f.stat().st_mtime < cutoff:
+                    f.unlink(missing_ok=True)
+            except Exception:
+                pass
 
 app = FastAPI(title="CompressIt", version="1.0.0")
 
@@ -53,10 +87,13 @@ app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="stat
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["http://localhost:8000", "http://127.0.0.1:8000"],
+    allow_methods=["GET", "POST", "DELETE"],
+    allow_headers=["Content-Type"],
 )
+
+# Lancer le nettoyage automatique en arrière-plan
+threading.Thread(target=_cleanup_outputs, daemon=True).start()
 
 # Types MIME → catégorie
 MIME_MAP = {
@@ -69,6 +106,40 @@ MIME_MAP = {
         "application/octet-stream",  # fallback pour zstd/lz4
     ],
 }
+
+_UID_RE = re.compile(r'^[a-f0-9]{32}$')
+_VALID_CODECS   = {"h264", "h265", "vp9"}
+_VALID_PRESETS  = {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"}
+_VALID_HEIGHTS  = {None, 480, 720, 1080}
+MAX_MERGE_FILES = 50
+
+
+def _validate_uid(uid: str):
+    if not _UID_RE.match(uid):
+        raise HTTPException(status_code=400, detail="UID invalide")
+
+
+async def _save_upload(file: UploadFile, dest: Path, max_bytes: int = MAX_SIZE_DEFAULT):
+    """Écrit un UploadFile sur disque en chunks async, lève HTTPException si trop gros."""
+    size = 0
+    try:
+        with open(dest, "wb") as f_out:
+            while chunk := await file.read(1024 * 1024):
+                size += len(chunk)
+                if size > max_bytes:
+                    dest.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Fichier trop volumineux (max {max_bytes // 1024 // 1024} MB)"
+                    )
+                f_out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        dest.unlink(missing_ok=True)
+        logger.error("Erreur écriture upload: %s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors de la réception du fichier")
+
 
 def detect_type(filename: str, mime: str) -> str:
     ext = Path(filename).suffix.lower()
@@ -140,17 +211,53 @@ async def compress(
     arc_algo: str = Form(None),           # zstd | lzma | gzip | brotli
     arc_level: int = Form(None),          # niveau algorithme natif
 ):
+    # Validation des paramètres
+    if level not in {"light", "standard", "aggressive"}:
+        raise HTTPException(status_code=400, detail="Niveau de compression invalide")
+    if vid_codec not in _VALID_CODECS:
+        raise HTTPException(status_code=400, detail="Codec vidéo invalide")
+    if vid_preset not in _VALID_PRESETS:
+        raise HTTPException(status_code=400, detail="Preset vidéo invalide")
+    if vid_crf is not None and not (0 <= vid_crf <= 51):
+        raise HTTPException(status_code=400, detail="CRF doit être entre 0 et 51")
+    if vid_max_height is not None and vid_max_height not in _VALID_HEIGHTS:
+        raise HTTPException(status_code=400, detail="Hauteur vidéo invalide (480, 720, 1080)")
+    if pdf_dpi is not None and not (30 <= pdf_dpi <= 300):
+        raise HTTPException(status_code=400, detail="DPI doit être entre 30 et 300")
+    if img_quality is not None and not (1 <= img_quality <= 100):
+        raise HTTPException(status_code=400, detail="Qualité image doit être entre 1 et 100")
+    if img_max_width is not None and not (1 <= img_max_width <= 10000):
+        raise HTTPException(status_code=400, detail="Largeur max doit être entre 1 et 10000")
     # Sauvegarder le fichier uploadé
     uid = uuid.uuid4().hex
     original_ext = Path(file.filename).suffix.lower()
     input_path = UPLOAD_DIR / f"{uid}_input{original_ext}"
 
-    with open(input_path, "wb") as f:
-        shutil.copyfileobj(file.file, f)
-
-    original_size = input_path.stat().st_size
     mime = file.content_type or mimetypes.guess_type(file.filename)[0] or ""
     file_type = detect_type(file.filename, mime)
+    max_bytes = MAX_SIZE.get(file_type, MAX_SIZE_DEFAULT)
+
+    # Écriture async chunk par chunk + vérification taille
+    size = 0
+    try:
+        with open(input_path, "wb") as f_out:
+            while chunk := await file.read(1024 * 1024):  # 1 MB chunks
+                size += len(chunk)
+                if size > max_bytes:
+                    input_path.unlink(missing_ok=True)
+                    raise HTTPException(
+                        status_code=413,
+                        detail=f"Fichier trop volumineux (max {max_bytes // 1024 // 1024} MB pour ce type)"
+                    )
+                f_out.write(chunk)
+    except HTTPException:
+        raise
+    except Exception as e:
+        input_path.unlink(missing_ok=True)
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
+
+    original_size = input_path.stat().st_size
 
     output_path = OUTPUT_DIR / f"{uid}_output{original_ext}"
 
@@ -192,22 +299,32 @@ async def compress(
 
     except Exception as e:
         input_path.unlink(missing_ok=True)
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
 
 @app.get("/download/{uid}")
 async def download(uid: str):
-    # Chercher le fichier output correspondant
+    _validate_uid(uid)
     matches = list(OUTPUT_DIR.glob(f"{uid}_output*"))
     if not matches:
         raise HTTPException(status_code=404, detail="Fichier introuvable ou expiré")
     output_path = matches[0]
+    # Vérifier que le chemin résolu reste dans OUTPUT_DIR (path traversal)
+    try:
+        output_path.resolve().relative_to(OUTPUT_DIR.resolve())
+    except ValueError:
+        raise HTTPException(status_code=403, detail="Accès refusé")
+    mime_type, _ = mimetypes.guess_type(str(output_path))
+    if not mime_type:
+        mime_type = "application/octet-stream"
     return FileResponse(
         path=output_path,
         filename=output_path.name,
-        background=None,
+        media_type=mime_type,
+        headers={"X-Content-Type-Options": "nosniff"},
     )
 
 
@@ -216,19 +333,21 @@ async def download(uid: str):
 async def pdf_merge(files: List[UploadFile] = File(...)):
     if len(files) < 2:
         raise HTTPException(status_code=400, detail="Au moins 2 fichiers requis")
+    if len(files) > MAX_MERGE_FILES:
+        raise HTTPException(status_code=400, detail=f"Maximum {MAX_MERGE_FILES} fichiers")
     uid = uuid.uuid4().hex
     input_paths = []
     try:
         for i, f in enumerate(files):
             p = UPLOAD_DIR / f"{uid}_input_{i}.pdf"
-            with open(p, "wb") as fh:
-                shutil.copyfileobj(f.file, fh)
+            await _save_upload(f, p, MAX_SIZE["pdf"])
             input_paths.append(p)
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         result = merge_pdfs(input_paths, output_path)
         return {"success": True, "download_id": uid, "output_filename": "merged.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         for p in input_paths:
             p.unlink(missing_ok=True)
@@ -243,15 +362,15 @@ async def pdf_split(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_dir = OUTPUT_DIR / uid
         result = split_pdf(input_path, output_dir, ranges)
         output_path = OUTPUT_DIR / f"{uid}_output.zip"
         result.rename(output_path)
         return {"success": True, "download_id": uid, "output_filename": "split_result.zip"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -265,13 +384,13 @@ async def pdf_to_jpg_route(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.zip"
         pdf_to_jpg(input_path, output_path, dpi=dpi)
         return {"success": True, "download_id": uid, "output_filename": "pages.zip"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -285,14 +404,14 @@ async def jpg_to_pdf_route(files: List[UploadFile] = File(...)):
         for i, f in enumerate(files):
             ext = Path(f.filename).suffix.lower() or ".jpg"
             p = UPLOAD_DIR / f"{uid}_input_{i}{ext}"
-            with open(p, "wb") as fh:
-                shutil.copyfileobj(f.file, fh)
+            await _save_upload(f, p, MAX_SIZE["image"])
             input_paths.append(p)
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         jpg_to_pdf(input_paths, output_path)
         return {"success": True, "download_id": uid, "output_filename": "images.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         for p in input_paths:
             p.unlink(missing_ok=True)
@@ -309,8 +428,7 @@ async def pdf_rotate(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         if rotation_map:
             rotate_pdf_map(input_path, output_path, rotation_map)
@@ -318,7 +436,8 @@ async def pdf_rotate(
             rotate_pdf(input_path, output_path, angle=angle or 90, pages=pages or "all")
         return {"success": True, "download_id": uid, "output_filename": "rotated.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -333,13 +452,13 @@ async def pdf_watermark(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         watermark_pdf(input_path, output_path, text=text, opacity=opacity)
         return {"success": True, "download_id": uid, "output_filename": "watermarked.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -353,13 +472,13 @@ async def pdf_page_numbers(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         add_page_numbers(input_path, output_path, position=position)
         return {"success": True, "download_id": uid, "output_filename": "numbered.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -373,13 +492,13 @@ async def pdf_delete_pages(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         delete_pages(input_path, output_path, pages_to_delete=pages)
         return {"success": True, "download_id": uid, "output_filename": "result.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -393,15 +512,15 @@ async def pdf_unlock(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         unlock_pdf(input_path, output_path, password=password)
         return {"success": True, "download_id": uid, "output_filename": "unlocked.pdf"}
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Mot de passe incorrect")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -415,13 +534,13 @@ async def pdf_protect(
     uid = uuid.uuid4().hex
     input_path = UPLOAD_DIR / f"{uid}_input.pdf"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["pdf"])
         output_path = OUTPUT_DIR / f"{uid}_output.pdf"
         protect_pdf(input_path, output_path, password=password)
         return {"success": True, "download_id": uid, "output_filename": "protected.pdf"}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -438,14 +557,14 @@ async def image_resize(
     ext = Path(file.filename).suffix.lower()
     input_path = UPLOAD_DIR / f"{uid}_input{ext}"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["image"])
         output_path = OUTPUT_DIR / f"{uid}_output{ext}"
         result = resize_image(input_path, output_path, width=width, height=height, keep_ratio=keep_ratio)
         output_filename = Path(file.filename).stem + "_resized" + result.suffix
         return {"success": True, "download_id": uid, "output_filename": output_filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -460,14 +579,14 @@ async def image_convert(
     ext = Path(file.filename).suffix.lower()
     input_path = UPLOAD_DIR / f"{uid}_input{ext}"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["image"])
         output_path = OUTPUT_DIR / f"{uid}_output{ext}"
         result = convert_image(input_path, output_path, target_format=target_format)
         output_filename = Path(file.filename).stem + "_converted" + result.suffix
         return {"success": True, "download_id": uid, "output_filename": output_filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -485,14 +604,14 @@ async def image_crop(
     ext = Path(file.filename).suffix.lower()
     input_path = UPLOAD_DIR / f"{uid}_input{ext}"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["image"])
         output_path = OUTPUT_DIR / f"{uid}_output{ext}"
         result = crop_image(input_path, output_path, left=left, top=top, right=right, bottom=bottom)
         output_filename = Path(file.filename).stem + "_cropped" + result.suffix
         return {"success": True, "download_id": uid, "output_filename": output_filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
@@ -508,20 +627,21 @@ async def image_rotate(
     ext = Path(file.filename).suffix.lower()
     input_path = UPLOAD_DIR / f"{uid}_input{ext}"
     try:
-        with open(input_path, "wb") as fh:
-            shutil.copyfileobj(file.file, fh)
+        await _save_upload(file, input_path, MAX_SIZE["image"])
         output_path = OUTPUT_DIR / f"{uid}_output{ext}"
         result = rotate_image(input_path, output_path, angle=angle or 0, flip=flip)
         output_filename = Path(file.filename).stem + "_rotated" + result.suffix
         return {"success": True, "download_id": uid, "output_filename": output_filename}
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors du traitement du fichier")
     finally:
         input_path.unlink(missing_ok=True)
 
 
 @app.delete("/cleanup/{uid}")
 async def cleanup(uid: str):
+    _validate_uid(uid)
     for f in OUTPUT_DIR.glob(f"{uid}_*"):
         f.unlink(missing_ok=True)
     return {"cleaned": True}

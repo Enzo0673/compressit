@@ -124,7 +124,7 @@ def compress_video(
     )
 
     # Supprimer None kwargs
-    out = out.global_args("-hide_banner")
+    out = out.global_args("-hide_banner", "-threads", "0")
 
     ffmpeg.run(out, overwrite_output=True, quiet=True)
     return output_path

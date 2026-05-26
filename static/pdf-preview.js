@@ -1,7 +1,13 @@
 /* Helper partagé : prévisualisation PDF.js (première page) */
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function renderPdfPreview(file, container, onPageCount) {
   const fallback = () => {
-    container.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${(file.size < 1024*1024 ? (file.size/1024).toFixed(1)+' Ko' : (file.size/(1024*1024)).toFixed(2)+' Mo')}</div></div>`;
+    container.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${escapeHtml(file.name)}</div><div class="file-size">${(file.size < 1024*1024 ? (file.size/1024).toFixed(1)+' Ko' : (file.size/(1024*1024)).toFixed(2)+' Mo')}</div></div>`;
   };
   if (typeof pdfjsLib === 'undefined') { fallback(); return; }
   file.arrayBuffer().then(buf => {
@@ -19,7 +25,7 @@ function renderPdfPreview(file, container, onPageCount) {
           container.appendChild(canvas);
           const info = document.createElement('div');
           info.className = 'file-info';
-          info.innerHTML = `<div class="file-name">${file.name}</div><div class="file-size">${sizeStr} — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}</div>`;
+          info.innerHTML = `<div class="file-name">${escapeHtml(file.name)}</div><div class="file-size">${sizeStr} — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}</div>`;
           container.appendChild(info);
         });
       });

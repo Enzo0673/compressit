@@ -2,6 +2,12 @@
    CompressIt — app.js
    ========================================================= */
 
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 const dropZone     = document.getElementById('dropZone');
 const fileInput    = document.getElementById('fileInput');
 const configPanel  = document.getElementById('configPanel');
@@ -79,7 +85,7 @@ function loadFile(file) {
   document.getElementById('filePreview').innerHTML = `
     <span class="file-icon">${FILE_ICONS[type]}</span>
     <div class="file-info">
-      <div class="file-name">${file.name}</div>
+      <div class="file-name">${escapeHtml(file.name)}</div>
       <div class="file-size">${formatBytes(file.size)}</div>
     </div>
   `;

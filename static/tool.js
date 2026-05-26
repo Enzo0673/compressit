@@ -3,6 +3,12 @@
    Script commun à toutes les pages outils
    ========================================================= */
 
+function escapeHtml(str) {
+  const d = document.createElement('div');
+  d.textContent = str;
+  return d.innerHTML;
+}
+
 function initTool(config) {
   const dropZone      = document.getElementById('dropZone');
   const fileInput     = document.getElementById('fileInput');
@@ -77,9 +83,9 @@ function initTool(config) {
         const img = new window.Image();
         img.onload = () => {
           preview.innerHTML = `
-            <img src="${url}" alt="${file.name}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:var(--shadow)" />
+            <img src="${url}" alt="${escapeHtml(file.name)}" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:var(--shadow)" />
             <div class="file-info" style="margin-top:8px">
-              <div class="file-name">${file.name}</div>
+              <div class="file-name">${escapeHtml(file.name)}</div>
               <div class="file-size">${formatBytes(file.size)} — ${img.naturalWidth}×${img.naturalHeight} px</div>
             </div>
           `;
@@ -102,7 +108,7 @@ function initTool(config) {
           preview.innerHTML = `
             <img src="${canvas.toDataURL()}" alt="aperçu" style="max-width:100%;max-height:160px;border-radius:8px;object-fit:contain;box-shadow:var(--shadow)" />
             <div class="file-info" style="margin-top:8px">
-              <div class="file-name">${file.name}</div>
+              <div class="file-name">${escapeHtml(file.name)}</div>
               <div class="file-size">${formatBytes(file.size)}${dur ? ' — ' + dur : ''}</div>
             </div>
           `;
@@ -112,7 +118,7 @@ function initTool(config) {
         const url = URL.createObjectURL(file);
         file.arrayBuffer().then(buf => {
           if (typeof pdfjsLib === 'undefined') {
-            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
+            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${escapeHtml(file.name)}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
             return;
           }
           pdfjsLib.getDocument({ data: buf }).promise.then(pdf => {
@@ -126,7 +132,7 @@ function initTool(config) {
                 const info = document.createElement('div');
                 info.className = 'file-info';
                 info.style.marginTop = '8px';
-                info.innerHTML = `<div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)} — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}</div>`;
+                info.innerHTML = `<div class="file-name">${escapeHtml(file.name)}</div><div class="file-size">${formatBytes(file.size)} — ${pdf.numPages} page${pdf.numPages > 1 ? 's' : ''}</div>`;
                 preview.style.flexDirection = 'column';
                 preview.style.alignItems = 'flex-start';
                 preview.appendChild(canvas);
@@ -134,7 +140,7 @@ function initTool(config) {
               });
             });
           }).catch(() => {
-            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${file.name}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
+            preview.innerHTML = `<span class="file-icon">📄</span><div class="file-info"><div class="file-name">${escapeHtml(file.name)}</div><div class="file-size">${formatBytes(file.size)}</div></div>`;
           });
           URL.revokeObjectURL(url);
         });
@@ -142,7 +148,7 @@ function initTool(config) {
         preview.innerHTML = `
           <span class="file-icon">${FILE_ICONS[type] || '📄'}</span>
           <div class="file-info">
-            <div class="file-name">${file.name}</div>
+            <div class="file-name">${escapeHtml(file.name)}</div>
             <div class="file-size">${formatBytes(file.size)}</div>
           </div>
         `;

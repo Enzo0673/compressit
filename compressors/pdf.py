@@ -8,6 +8,7 @@ Stratégies :
 """
 
 from pathlib import Path
+from concurrent.futures import ThreadPoolExecutor
 import pikepdf
 from PIL import Image
 import io
@@ -45,9 +46,9 @@ def compress_pdf(
                     except Exception:
                         pass
 
-        # Recompresser les images internes
-        for page in pdf.pages:
-            _recompress_page_images(page, target_quality)
+        # Recompresser les images internes (parallèle)
+        with ThreadPoolExecutor() as executor:
+            list(executor.map(lambda p: _recompress_page_images(p, target_quality), pdf.pages))
 
         # Supprimer les objets non référencés
         pdf.save(

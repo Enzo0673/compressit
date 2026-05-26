@@ -26,6 +26,7 @@
         <p class="section-label">Images à assembler <span class="file-count" id="fileCount"></span></p>
         <div class="file-list" id="fileList"></div>
         <label class="btn-add-more" for="fileInputMore">+ Ajouter d'autres images</label>
+
         <input type="file" id="fileInputMore" hidden accept="image/*" multiple />
         <button class="btn-compress" id="btnAction">📄 Créer le PDF</button>
       </div>
@@ -52,6 +53,11 @@
     const fileCount = document.getElementById('fileCount');
     const ALL = [dropZone, fileListPanel, document.getElementById('progressPanel'), document.getElementById('resultPanel'), document.getElementById('errorPanel')];
     function showPanel(p) { ALL.forEach(x => { x.hidden = x !== p; x.style.display = x === p ? '' : 'none'; }); }
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
     function formatBytes(b) { return b < 1024*1024 ? (b/1024).toFixed(1)+' Ko' : (b/(1024*1024)).toFixed(2)+' Mo'; }
     function renderFileList() {
       fileCount.textContent = `(${files.length})`;
@@ -59,7 +65,7 @@
       files.forEach((f, i) => {
         const item = document.createElement('div');
         item.className = 'file-list-item';
-        item.innerHTML = `<span class="file-list-icon" id="thumb-${i}">🖼️</span><span class="file-list-name">${f.name}</span><span class="file-list-size">${formatBytes(f.size)}</span><button class="file-list-remove" onclick="removeFile(${i})">✕</button>`;
+        item.innerHTML = `<span class="file-list-icon" id="thumb-${i}">🖼️</span><span class="file-list-name">${escapeHtml(f.name)}</span><span class="file-list-size">${formatBytes(f.size)}</span><button class="file-list-remove" onclick="removeFile(${i})">✕</button>`;
         fileList.appendChild(item);
         // Charger miniature réelle
         const url = URL.createObjectURL(f);

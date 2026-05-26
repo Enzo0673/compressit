@@ -27,7 +27,6 @@
       <div class="file-list-panel" id="fileListPanel" hidden>
         <p class="section-label">Fichiers à fusionner <span class="file-count" id="fileCount"></span></p>
         <div class="file-list" id="fileList"></div>
-        <p class="hint-text">Glissez les éléments pour réorganiser l'ordre</p>
         <label class="btn-add-more" for="fileInputMore">+ Ajouter d'autres PDF</label>
         <input type="file" id="fileInputMore" hidden accept=".pdf" multiple />
         <button class="btn-compress" id="btnAction">
@@ -72,6 +71,12 @@
     const resultPanel = document.getElementById('resultPanel');
     const errorPanel = document.getElementById('errorPanel');
 
+    function escapeHtml(str) {
+      const d = document.createElement('div');
+      d.textContent = str;
+      return d.innerHTML;
+    }
+
     function formatBytes(b) {
       if (b < 1024*1024) return (b/1024).toFixed(1)+' Ko';
       return (b/(1024*1024)).toFixed(2)+' Mo';
@@ -89,12 +94,14 @@
       fileList.innerHTML = files.map((f, i) => `
         <div class="file-list-item">
           <span class="file-list-icon">📄</span>
-          <span class="file-list-name">${f.name}</span>
+          <span class="file-list-name">${escapeHtml(f.name)}</span>
           <span class="file-list-size">${formatBytes(f.size)}</span>
           <button class="file-list-remove" onclick="removeFile(${i})">✕</button>
         </div>
       `).join('');
-      if (files.length >= 2) showPanel(fileListPanel);
+      btnAction.disabled = files.length < 2;
+      btnAction.style.opacity = files.length < 2 ? '0.5' : '1';
+      if (files.length >= 1) showPanel(fileListPanel);
     }
 
     function addFiles(newFiles) {
