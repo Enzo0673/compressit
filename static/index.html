@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>CompressIt — Outils fichiers gratuits et locaux</title>
+  <script src="/static/theme.js"></script>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6366f1" />
@@ -29,6 +30,7 @@
         <span class="logo-text">CompressIt</span>
       </div>
       <span class="home-tagline">100% local &mdash; vos fichiers ne quittent jamais votre machine</span>
+      <button class="btn-theme" id="btnTheme" title="Basculer thème sombre/clair" onclick="window.__theme.toggle(); this.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙'">🌙</button>
     </header>
 
     <!-- Hero -->
@@ -219,6 +221,11 @@
     if ('serviceWorker' in navigator) {
       navigator.serviceWorker.register('/service-worker.js');
     }
+    // Sync icône bouton thème avec le thème courant
+    document.addEventListener('DOMContentLoaded', () => {
+      const btn = document.getElementById('btnTheme');
+      if (btn) btn.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙';
+    });
   </script>
   <script src="/static/home.js"></script>
   <script src="/static/banner.js"></script>

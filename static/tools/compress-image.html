@@ -4,6 +4,7 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Compresser image — CompressIt</title>
+  <script src="/static/theme.js"></script>
   <link rel="stylesheet" href="/static/style.css" />
   <link rel="manifest" href="/manifest.json" />
   <meta name="theme-color" content="#6366f1" />
@@ -28,6 +29,7 @@
         </a>
       </div>
       <a href="/" class="btn-back">← Tous les outils</a>
+      <button class="btn-theme" title="Thème sombre/clair" onclick="window.__theme.toggle(); this.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙'">🌙</button>
     </header>
 
     <div class="tool-hero">

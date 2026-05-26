@@ -21,6 +21,19 @@
   --shadow-lg: 0 20px 25px -5px rgba(0,0,0,.1), 0 10px 10px -5px rgba(0,0,0,.04);
 }
 
+[data-theme="dark"] {
+  --primary: #818cf8;
+  --primary-dark: #6366f1;
+  --primary-light: #1e1b4b;
+  --surface: #1e293b;
+  --surface-2: #0f172a;
+  --border: #334155;
+  --text: #f1f5f9;
+  --text-muted: #94a3b8;
+  --shadow: 0 4px 6px -1px rgba(0,0,0,.3), 0 2px 4px -1px rgba(0,0,0,.2);
+  --shadow-lg: 0 20px 25px -5px rgba(0,0,0,.4), 0 10px 10px -5px rgba(0,0,0,.2);
+}
+
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   background: linear-gradient(135deg, #f0f0ff 0%, #faf5ff 50%, #eff6ff 100%);
@@ -30,6 +43,10 @@ body {
   align-items: center;
   justify-content: center;
   padding: 24px 16px;
+}
+
+[data-theme="dark"] body {
+  background: linear-gradient(135deg, #0f0f1a 0%, #0f172a 50%, #0a0f1e 100%);
 }
 
 .app {
@@ -198,7 +215,7 @@ body {
   border: 1px solid var(--border);
   border-radius: 6px;
   font-size: .85rem;
-  background: white;
+  background: var(--surface);
   color: var(--text);
   transition: border-color .15s;
 }
@@ -297,7 +314,7 @@ body {
   padding: 13px 20px;
   border: 2px solid var(--border);
   border-radius: 10px;
-  background: white;
+  background: var(--surface);
   font-weight: 600;
   font-size: .9rem;
   cursor: pointer;
@@ -318,6 +335,20 @@ body {
 }
 .error-msg { color: var(--text-muted); font-size: .9rem; max-width: 340px; }
 
+/* ---- Dark mode toggle button ---- */
+.btn-theme {
+  background: none;
+  border: 1.5px solid var(--border);
+  border-radius: 8px;
+  padding: 6px 10px;
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--text-muted);
+  line-height: 1;
+  transition: border-color .15s, color .15s;
+}
+.btn-theme:hover { border-color: var(--primary); color: var(--primary); }
+
 /* ---- Footer ---- */
 .footer {
   text-align: center;
@@ -335,7 +366,6 @@ body.home-body {
   padding: 0;
   background: var(--surface-2);
 }
-
 .home-app {
   width: 100%;
   max-width: 960px;
@@ -576,7 +606,7 @@ body.home-body {
 }
 #drop-overlay.active { opacity: 1; pointer-events: all; }
 .drop-overlay-inner {
-  background: #fff;
+  background: var(--surface);
   border: 2.5px dashed var(--primary);
   border-radius: 24px;
   padding: 48px 64px;
@@ -632,8 +662,7 @@ body.home-body {
   max-height: 80vh;
   overflow-y: auto;
   box-shadow: var(--shadow-lg);
-}
-.tool-picker-header {
+}.tool-picker-header {
   display: flex;
   align-items: center;
   justify-content: space-between;

@@ -124,15 +124,10 @@ expertToggle.addEventListener('click', () => {
 
 // ---- Progress bar animée ----
 let _progressInterval = null;
+let _progressES = null;
 
-function startProgress(fileSizeBytes, fileType) {
-  // Estimation de la durée selon le type et le poids (en ms)
-  const mbSize = fileSizeBytes / (1024 * 1024);
-  const durations = { image: 800, pdf: 1500, video: mbSize * 1200, archive: mbSize * 600 };
-  const estimatedMs = Math.max(1000, Math.min(durations[fileType] || mbSize * 800, 60000));
-
+function startProgress(fileSizeBytes, fileType, jobId) {
   const bar = document.getElementById('progressBar');
-  const label = document.getElementById('progressLabel');
   const elapsed = document.getElementById('progressElapsed');
 
   bar.style.animation = 'none';
@@ -140,25 +135,40 @@ function startProgress(fileSizeBytes, fileType) {
   bar.style.width = '0%';
   bar.style.transition = 'none';
 
-  let pct = 0;
-  let startTime = Date.now();
-  const tickMs = 80;
+  if (fileType === 'video' && jobId) {
+    let startTime = Date.now();
+    const tick = setInterval(() => {
+      elapsed.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+    }, 1000);
+    _progressES = new EventSource(`/compress/progress/${jobId}`);
+    _progressES.onmessage = e => {
+      const pct = parseFloat(e.data);
+      bar.style.transition = 'width 0.4s ease';
+      bar.style.width = Math.min(pct, 99).toFixed(1) + '%';
+      if (pct >= 100) { _progressES.close(); _progressES = null; clearInterval(tick); }
+    };
+    _progressES.onerror = () => { _progressES.close(); _progressES = null; clearInterval(tick); };
+    _progressInterval = tick;
+    return;
+  }
 
+  // Estimation classique
+  const mbSize = fileSizeBytes / (1024 * 1024);
+  const durations = { image: 800, pdf: 1500, video: mbSize * 1200, archive: mbSize * 600 };
+  const estimatedMs = Math.max(1000, Math.min(durations[fileType] || mbSize * 800, 60000));
+  let startTime = Date.now();
   _progressInterval = setInterval(() => {
     const t = (Date.now() - startTime) / estimatedMs;
-    // Courbe qui ralentit vers 95% et n'atteint jamais 100 seul
-    pct = 95 * (1 - Math.exp(-3 * t));
+    const pct = 95 * (1 - Math.exp(-3 * t));
     bar.style.width = pct.toFixed(1) + '%';
-
-    // Timer
-    const secs = Math.floor((Date.now() - startTime) / 1000);
-    elapsed.textContent = secs + 's';
-  }, tickMs);
+    elapsed.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+  }, 80);
 }
 
 function finishProgress() {
   clearInterval(_progressInterval);
   _progressInterval = null;
+  if (_progressES) { _progressES.close(); _progressES = null; }
   const bar = document.getElementById('progressBar');
   bar.style.transition = 'width 0.3s ease';
   bar.style.width = '100%';
@@ -167,12 +177,14 @@ btnCompress.addEventListener('click', withButtonLock(btnCompress, async () => {
   if (!currentFile) return;
 
   const fileType = detectType(currentFile.name);
+  const jobId = crypto.randomUUID().replace(/-/g, '');
   showPanel(progressPanel);
-  startProgress(currentFile.size, fileType);
+  startProgress(currentFile.size, fileType, fileType === 'video' ? jobId : null);
 
   const fd = new FormData();
   fd.append('file', currentFile);
   fd.append('level', selectedLevel);
+  fd.append('job_id', jobId);
 
   // Options image
   const imgQ = document.getElementById('imgQuality').value;
@@ -243,6 +255,7 @@ function showResult(data) {
 
   btnDownload.href = `/download/${data.download_id}`;
   btnDownload.download = data.output_filename;
+  setTimeout(() => btnDownload.click(), 400);
 
   showPanel(resultPanel);
 }

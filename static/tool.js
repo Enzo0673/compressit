@@ -185,15 +185,36 @@ function initTool(config) {
 
   // ---- Progress bar ----
   let _progressInterval = null;
+  let _progressES = null;
 
-  function startProgress(fileSizeBytes, fileType) {
-    const mbSize = fileSizeBytes / (1024 * 1024);
-    const durations = { image: 800, pdf: 1500, video: mbSize * 1200, archive: mbSize * 600 };
-    const estimatedMs = Math.max(1000, Math.min(durations[fileType] || mbSize * 800, 60000));
+  function startProgress(fileSizeBytes, fileType, jobId) {
     const bar = document.getElementById('progressBar');
     const elapsed = document.getElementById('progressElapsed');
     bar.style.width = '0%';
     bar.style.transition = 'none';
+
+    if (fileType === 'video' && jobId) {
+      // Progression réelle via SSE
+      let startTime = Date.now();
+      const tick = setInterval(() => {
+        if (elapsed) elapsed.textContent = Math.floor((Date.now() - startTime) / 1000) + 's';
+      }, 1000);
+      _progressES = new EventSource(`/compress/progress/${jobId}`);
+      _progressES.onmessage = e => {
+        const pct = parseFloat(e.data);
+        bar.style.transition = 'width 0.4s ease';
+        bar.style.width = Math.min(pct, 99).toFixed(1) + '%';
+        if (pct >= 100) { _progressES.close(); _progressES = null; clearInterval(tick); }
+      };
+      _progressES.onerror = () => { _progressES.close(); _progressES = null; clearInterval(tick); };
+      _progressInterval = tick;
+      return;
+    }
+
+    // Estimation classique pour les autres types
+    const mbSize = fileSizeBytes / (1024 * 1024);
+    const durations = { image: 800, pdf: 1500, video: mbSize * 1200, archive: mbSize * 600 };
+    const estimatedMs = Math.max(1000, Math.min(durations[fileType] || mbSize * 800, 60000));
     let startTime = Date.now();
     _progressInterval = setInterval(() => {
       const t = (Date.now() - startTime) / estimatedMs;
@@ -206,6 +227,7 @@ function initTool(config) {
   function finishProgress() {
     clearInterval(_progressInterval);
     _progressInterval = null;
+    if (_progressES) { _progressES.close(); _progressES = null; }
     const bar = document.getElementById('progressBar');
     bar.style.transition = 'width 0.3s ease';
     bar.style.width = '100%';
@@ -216,12 +238,14 @@ function initTool(config) {
     btnCompress.addEventListener('click', withButtonLock(btnCompress, async () => {
       if (!currentFile) return;
       const fileType = detectType(currentFile.name);
+      const jobId = crypto.randomUUID().replace(/-/g, '');
       showPanel(progressPanel);
-      startProgress(currentFile.size, fileType);
+      startProgress(currentFile.size, fileType, fileType === 'video' ? jobId : null);
 
       const fd = new FormData();
       fd.append('file', currentFile);
       fd.append('level', selectedLevel);
+      fd.append('job_id', jobId);
 
       // Options image
       const imgQ = document.getElementById('imgQuality');
@@ -274,7 +298,11 @@ function initTool(config) {
       <div class="stat-item"><span class="stat-label">Après</span><span class="stat-value">${formatBytes(data.compressed_size)}</span></div>
       <div class="stat-item"><span class="stat-label">Gain</span><span class="stat-value" style="color:var(--success)">−${formatBytes(data.original_size - data.compressed_size)}</span></div>
     `;
-    if (btnDownload) { btnDownload.href = `/download/${data.download_id}`; btnDownload.download = data.output_filename; }
+    if (btnDownload) {
+      btnDownload.href = `/download/${data.download_id}`;
+      btnDownload.download = data.output_filename;
+      setTimeout(() => btnDownload.click(), 400);
+    }
     showPanel(resultPanel);
   }
 

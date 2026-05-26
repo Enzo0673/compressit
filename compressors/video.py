@@ -9,6 +9,8 @@ import ffmpeg
 import subprocess
 import shutil
 import os
+import re as _re
+from typing import Callable, Optional
 
 # CRF par niveau (plus le chiffre est haut, plus la compression est forte)
 # H.264 : 18 (visuel lossless) → 28 (bon) → 35 (agressif)
@@ -59,6 +61,7 @@ def compress_video(
     codec: str = "h264",
     preset: str = "medium",
     max_height: int = None,
+    on_progress: Optional[Callable[[float], None]] = None,
 ) -> Path:
     ffmpeg_exe = _find_ffmpeg()
     if not ffmpeg_exe:
@@ -87,7 +90,6 @@ def compress_video(
     # Filtres vidéo
     video = input_stream.video
     if target_height:
-        # Redimensionner seulement si la vidéo est plus grande que la cible
         video = ffmpeg.filter(
             video, "scale",
             w=-2, h=f"min({target_height},ih)",
@@ -95,7 +97,6 @@ def compress_video(
 
     audio = input_stream.audio
 
-    # Paramètres codec
     video_kwargs = {
         "vcodec": lib,
         "crf": target_crf,
@@ -122,11 +123,48 @@ def compress_video(
         movflags="+faststart" if codec_key != "vp9" else None,
         loglevel="error",
     )
-
-    # Supprimer None kwargs
     out = out.global_args("-hide_banner", "-threads", "0")
 
-    ffmpeg.run(out, overwrite_output=True, quiet=True)
+    if on_progress is None:
+        ffmpeg.run(out, overwrite_output=True, quiet=True)
+        return output_path
+
+    # Récupérer la durée totale pour calculer le pourcentage
+    try:
+        probe = ffmpeg.probe(str(input_path))
+        duration = float(probe["format"]["duration"])
+    except Exception:
+        duration = None
+
+    # Lancer ffmpeg avec progression sur stderr
+    cmd = ffmpeg.compile(out, overwrite_output=True)
+    # Remplacer -loglevel error par stats pour avoir les lignes de progression
+    try:
+        idx = cmd.index("-loglevel")
+        cmd[idx + 1] = "error"
+    except ValueError:
+        pass
+    cmd += ["-progress", "pipe:2", "-nostats"]
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+    )
+    _time_re = _re.compile(r"out_time_ms=(\d+)")
+    for line in proc.stderr:
+        m = _time_re.search(line)
+        if m and duration:
+            elapsed_s = int(m.group(1)) / 1_000_000
+            pct = min(99.0, elapsed_s / duration * 100)
+            on_progress(pct)
+    proc.wait()
+    if proc.returncode != 0:
+        raise RuntimeError("FFmpeg a retourné une erreur lors de la compression vidéo")
+    on_progress(100.0)
     return output_path
 
 

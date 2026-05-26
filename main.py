@@ -16,13 +16,14 @@ import webbrowser
 import time
 import shutil
 import subprocess
+import asyncio
 from pathlib import Path
 from typing import List
 
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from starlette.exceptions import HTTPException as StarletteHTTPException
-
+from starlette.responses import StreamingResponse
 logger = logging.getLogger(__name__)
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.staticfiles import StaticFiles
@@ -178,6 +179,9 @@ _VALID_PRESETS  = {"ultrafast", "superfast", "veryfast", "faster", "fast", "medi
 _VALID_HEIGHTS  = {None, 480, 720, 1080}
 MAX_MERGE_FILES = 50
 
+# Progression vidéo — partagé entre thread compress et endpoint SSE
+_video_progress: dict = {}  # {uid: float 0-100}
+
 
 def _validate_uid(uid: str):
     if not _UID_RE.match(uid):
@@ -279,6 +283,7 @@ async def root():
 async def compress(
     file: UploadFile = File(...),
     level: str = Form("standard"),        # light | standard | aggressive
+    job_id: str = Form(None),             # ID client pour SSE progression vidéo
     # Options expert image
     img_quality: int = Form(None),        # 1-100
     img_format: str = Form(None),         # jpeg | png | webp
@@ -357,10 +362,23 @@ async def compress(
                 dpi=pdf_dpi, remove_metadata=pdf_remove_metadata
             )
         elif file_type == "video":
-            output_path = compress_video(
-                input_path, output_path, level,
-                crf=vid_crf, codec=vid_codec, preset=vid_preset, max_height=vid_max_height
+            # Utiliser job_id fourni par le client pour la progression SSE
+            progress_key = job_id if (job_id and _UID_RE.match(job_id)) else uid
+            _video_progress[progress_key] = 0.0
+
+            def _progress_cb(pct: float):
+                _video_progress[progress_key] = pct
+
+            loop = asyncio.get_event_loop()
+            output_path = await loop.run_in_executor(
+                None,
+                lambda: compress_video(
+                    input_path, output_path, level,
+                    crf=vid_crf, codec=vid_codec, preset=vid_preset,
+                    max_height=vid_max_height, on_progress=_progress_cb,
+                )
             )
+            _video_progress.pop(progress_key, None)
         else:
             output_path = compress_archive(
                 input_path, output_path, level,
@@ -409,6 +427,32 @@ async def download(uid: str):
         filename=output_path.name,
         media_type=mime_type,
         headers={"X-Content-Type-Options": "nosniff"},
+    )
+
+
+@app.get("/compress/progress/{uid}")
+async def compress_progress(uid: str):
+    """SSE endpoint — streame la progression FFmpeg pour un job vidéo."""
+    _validate_uid(uid)
+
+    async def event_stream():
+        sent_done = False
+        while True:
+            pct = _video_progress.get(uid)
+            if pct is None:
+                if not sent_done:
+                    yield "data: 100\n\n"
+                break
+            yield f"data: {pct:.1f}\n\n"
+            if pct >= 100.0:
+                sent_done = True
+                break
+            await asyncio.sleep(0.4)
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

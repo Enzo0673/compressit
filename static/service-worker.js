@@ -8,6 +8,7 @@ const STATIC_ASSETS = [
   '/static/utils.js',
   '/static/banner.js',
   '/static/home.js',
+  '/static/theme.js',
   '/static/manifest.json',
   '/static/icons/icon-192.png',
   '/static/icons/icon-512.png',
