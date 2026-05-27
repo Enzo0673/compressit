@@ -156,12 +156,13 @@
     const MAX_CANVAS = 600;
     let scale = 1;
     let cropX = 0, cropY = 0, cropW = 0, cropH = 0;
-    let dragging = false, resizing = false;
+    let dragging = false, resizing = false, drawing = false;
     let dragStartX = 0, dragStartY = 0;
     let rectStartX = 0, rectStartY = 0;
     let handle = null;
     const HANDLE_SIZE = 10;   // taille visuelle
-    const HANDLE_HIT  = 16;   // zone de détection (plus grande pour faciliter la prise)
+    const HANDLE_HIT  = 14;   // zone de détection
+    const DRAW_THRESHOLD = 5; // px minimum pour déclencher un nouveau rectangle
 
     const dropZone      = document.getElementById('dropZone');
     const fileInput     = document.getElementById('fileInput');
@@ -292,37 +293,59 @@
         dragging = true;
         dragStartX = x - cropX; dragStartY = y - cropY;
       } else {
-        // Nouveau rectangle
-        dragging = false; resizing = false; handle = null;
-        cropX = x; cropY = y; cropW = 0; cropH = 0;
+        // Prépare un nouveau rectangle — ne l'active vraiment qu'après DRAW_THRESHOLD px
+        drawing = false;
         rectStartX = x; rectStartY = y;
-        resizing = false;
-        // Special: on dessine un nouveau rect
-        canvas.addEventListener('mousemove', drawNewRect);
-        canvas.addEventListener('touchmove', drawNewRectTouch, { passive: false });
+        canvas.addEventListener('mousemove', onPotentialDraw);
+        canvas.addEventListener('touchmove', onPotentialDrawTouch, { passive: false });
         canvas.addEventListener('mouseup', endNewRect);
         canvas.addEventListener('touchend', endNewRect);
       }
     }
 
-    function drawNewRect(e) {
+    function onPotentialDraw(e) {
       const { x, y } = canvasPos(e);
-      let w = Math.abs(x - rectStartX);
-      let h = Math.abs(y - rectStartY);
-      const enforced = enforceRatio(w, h);
-      w = enforced.w; h = enforced.h;
-      cropX = x < rectStartX ? rectStartX - w : rectStartX;
-      cropY = y < rectStartY ? rectStartY - h : rectStartY;
-      cropW = w; cropH = h;
+      if (!drawing) {
+        const dist = Math.hypot(x - rectStartX, y - rectStartY);
+        if (dist < DRAW_THRESHOLD) return;
+        // Seuil atteint : on commence vraiment le dessin
+        drawing = true;
+        cropX = rectStartX; cropY = rectStartY; cropW = 0; cropH = 0;
+      }
+      updateNewRect(x, y);
+    }
+    function onPotentialDrawTouch(e) { e.preventDefault(); onPotentialDraw(e); }
+
+    function updateNewRect(x, y) {
+      let w = x - rectStartX;
+      let h = y - rectStartY;
+      const absW = Math.abs(w), absH = Math.abs(h);
+      let fw, fh;
+      if (lockedRatio) {
+        const { w: rw, h: rh } = lockedRatio;
+        // Contraindre les deux dimensions selon la plus grande variation
+        if (absW / rw >= absH / rh) {
+          fw = absW;
+          fh = Math.round(absW * rh / rw);
+        } else {
+          fh = absH;
+          fw = Math.round(absH * rw / rh);
+        }
+      } else {
+        fw = absW; fh = absH;
+      }
+      cropX = w < 0 ? rectStartX - fw : rectStartX;
+      cropY = h < 0 ? rectStartY - fh : rectStartY;
+      cropW = fw; cropH = fh;
       clampCrop();
       drawCropCanvas();
     }
-    function drawNewRectTouch(e) { e.preventDefault(); drawNewRect(e); }
     function endNewRect() {
-      canvas.removeEventListener('mousemove', drawNewRect);
-      canvas.removeEventListener('touchmove', drawNewRectTouch);
+      canvas.removeEventListener('mousemove', onPotentialDraw);
+      canvas.removeEventListener('touchmove', onPotentialDrawTouch);
       canvas.removeEventListener('mouseup', endNewRect);
       canvas.removeEventListener('touchend', endNewRect);
+      drawing = false;
       if (activeTab === 'manual') syncManualFromCrop();
       updateResultPreview();
     }
@@ -348,8 +371,25 @@
         if (id.includes('w')) { nx = rectStartX + dx; nw = cropW - dx; }
         if (id.includes('n')) { ny = rectStartY + dy; nh = cropH - dy; }
         if (lockedRatio) {
-          const enforced = enforceRatio(Math.abs(nw), Math.abs(nh));
-          nh = enforced.h * Math.sign(nh || 1);
+          const { w: rw, h: rh } = lockedRatio;
+          const absW = Math.abs(nw), absH = Math.abs(nh);
+          let fw, fh;
+          // La direction principale du handle détermine quelle dimension piloter
+          const isVertical = id === 'n' || id === 's';
+          const isHorizontal = id === 'e' || id === 'w';
+          if (isVertical) {
+            fh = absH; fw = Math.round(absH * rw / rh);
+          } else if (isHorizontal) {
+            fw = absW; fh = Math.round(absW * rh / rw);
+          } else {
+            // Corner handle : la plus grande variation domine
+            if (absW / rw >= absH / rh) { fw = absW; fh = Math.round(absW * rh / rw); }
+            else { fh = absH; fw = Math.round(absH * rw / rh); }
+          }
+          // Réajuster nx/ny si le handle tire vers la gauche/haut
+          if (id.includes('w')) nx = rectStartX + cropW - fw;
+          if (id.includes('n')) ny = rectStartY + cropH - fh;
+          nw = fw; nh = fh;
         }
         cropX = nx; cropY = ny; cropW = nw; cropH = nh;
         clampCrop();
