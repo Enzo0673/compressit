@@ -214,3 +214,105 @@ def resize_video(input_path: Path, output_path: Path, width: int = None, height:
     )
     ffmpeg.run(out, overwrite_output=True, quiet=True)
     return output_path
+
+
+def merge_videos(input_paths: list, output_path: Path) -> Path:
+    """Concatène plusieurs vidéos dans l'ordre. Ré-encode pour harmoniser les flux."""
+    ffmpeg_exe = _find_ffmpeg()
+    if not ffmpeg_exe:
+        raise RuntimeError("FFmpeg introuvable.")
+    if len(input_paths) < 2:
+        raise ValueError("Au moins 2 vidéos requises.")
+    os.environ["PATH"] = str(_BIN_DIR) + os.pathsep + os.environ.get("PATH", "")
+
+    output_path = output_path.with_suffix(".mp4")
+
+    # Construire la liste de fichiers pour le filtre concat
+    inputs = [ffmpeg.input(str(p)) for p in input_paths]
+    # Intercaler video + audio pour chaque input
+    streams = []
+    for inp in inputs:
+        streams.append(inp.video)
+        streams.append(inp.audio)
+
+    concat = ffmpeg.concat(*streams, v=1, a=1)
+    out = ffmpeg.output(
+        concat,
+        str(output_path),
+        vcodec="libx264",
+        crf=22,
+        preset="fast",
+        acodec="aac",
+        **{"b:a": "128k"},
+        loglevel="error",
+    ).global_args("-hide_banner")
+
+    ffmpeg.run(out, overwrite_output=True, quiet=True)
+    return output_path
+
+
+def add_text_video(
+    input_path: Path,
+    output_path: Path,
+    text: str,
+    position: str = "bottom",
+    font_size: int = 48,
+    font_color: str = "white",
+    start_time: float = None,
+    end_time: float = None,
+) -> Path:
+    """Ajoute un texte (sous-titre ou watermark) sur la vidéo via le filtre drawtext."""
+    ffmpeg_exe = _find_ffmpeg()
+    if not ffmpeg_exe:
+        raise RuntimeError("FFmpeg introuvable.")
+    os.environ["PATH"] = str(_BIN_DIR) + os.pathsep + os.environ.get("PATH", "")
+
+    ext = input_path.suffix.lower() or ".mp4"
+    output_path = output_path.with_suffix(ext)
+
+    # Position du texte
+    pos_map = {
+        "bottom": "(w-text_w)/2:h-th-40",
+        "top": "(w-text_w)/2:40",
+        "center": "(w-text_w)/2:(h-th)/2",
+        "bottom-left": "20:h-th-40",
+        "bottom-right": "w-tw-20:h-th-40",
+        "top-left": "20:40",
+        "top-right": "w-tw-20:40",
+    }
+    xy = pos_map.get(position, pos_map["bottom"])
+    x, y = xy.split(":", 1)
+
+    # Sanitiser le texte pour drawtext (échapper les caractères spéciaux)
+    safe_text = text.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:").replace(",", "\\,")
+
+    drawtext_opts = {
+        "text": safe_text,
+        "fontsize": font_size,
+        "fontcolor": font_color,
+        "x": x,
+        "y": y,
+        "box": 1,
+        "boxcolor": "black@0.4",
+        "boxborderw": 8,
+    }
+
+    if start_time is not None and end_time is not None:
+        drawtext_opts["enable"] = f"'between(t,{start_time},{end_time})'"
+
+    inp = ffmpeg.input(str(input_path))
+    video = inp.video.filter("drawtext", **drawtext_opts)
+    audio = inp.audio
+
+    out = ffmpeg.output(
+        video, audio,
+        str(output_path),
+        vcodec="libx264",
+        crf=18,
+        preset="fast",
+        acodec="aac",
+        loglevel="error",
+    ).global_args("-hide_banner")
+
+    ffmpeg.run(out, overwrite_output=True, quiet=True)
+    return output_path

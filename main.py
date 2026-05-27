@@ -33,7 +33,7 @@ import uvicorn
 
 from compressors.image import compress_image
 from compressors.pdf import compress_pdf
-from compressors.video import compress_video, trim_video, resize_video, FFMPEG_AVAILABLE as _FFMPEG_AVAILABLE
+from compressors.video import compress_video, trim_video, resize_video, merge_videos, add_text_video, FFMPEG_AVAILABLE as _FFMPEG_AVAILABLE
 from compressors.archive import compress_archive
 from compressors.pdf_tools import (
     merge_pdfs, split_pdf, pdf_to_jpg, jpg_to_pdf,
@@ -876,7 +876,7 @@ async def video_trim(
             raise HTTPException(status_code=400, detail="Timestamps invalides.")
         result = trim_video(input_path, output_path, start=start, end=end)
         stem = Path(file.filename).stem
-        return {"success": True, "download_id": uid + "_output", "output_filename": stem + "_trimmed" + result.suffix}
+        return {"success": True, "download_id": uid, "output_filename": stem + "_trimmed" + result.suffix}
     except HTTPException:
         raise
     except Exception as e:
@@ -907,12 +907,88 @@ async def video_resize_route(
             raise HTTPException(status_code=400, detail="Hauteur invalide.")
         result = resize_video(input_path, output_path, width=width, height=height)
         stem = Path(file.filename).stem
-        return {"success": True, "download_id": uid + "_output", "output_filename": stem + "_resized" + result.suffix}
+        return {"success": True, "download_id": uid, "output_filename": stem + "_resized" + result.suffix}
     except HTTPException:
         raise
     except Exception as e:
         logger.error("%s", e, exc_info=True)
         raise HTTPException(status_code=500, detail="Erreur lors du redimensionnement")
+    finally:
+        input_path.unlink(missing_ok=True)
+
+
+# ---- Fusionner vidéos ----
+@app.post("/video/merge")
+async def video_merge(files: List[UploadFile] = File(...)):
+    if len(files) < 2:
+        raise HTTPException(status_code=400, detail="Au moins 2 vidéos requises.")
+    if len(files) > 10:
+        raise HTTPException(status_code=400, detail="Maximum 10 vidéos.")
+    uid = uuid.uuid4().hex
+    input_paths = []
+    try:
+        for i, f in enumerate(files):
+            ext = Path(f.filename or "video.mp4").suffix.lower() or ".mp4"
+            p = UPLOAD_DIR / f"{uid}_input_{i}{ext}"
+            await _save_upload(f, p, MAX_SIZE["video"])
+            input_paths.append(p)
+        output_path = OUTPUT_DIR / f"{uid}_output.mp4"
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: merge_videos(input_paths, output_path)
+        )
+        return {"success": True, "download_id": uid, "output_filename": "merged.mp4"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors de la fusion")
+    finally:
+        for p in input_paths:
+            p.unlink(missing_ok=True)
+
+
+# ---- Ajouter texte/sous-titre sur vidéo ----
+_VALID_TEXT_POSITIONS = {"bottom", "top", "center", "bottom-left", "bottom-right", "top-left", "top-right"}
+
+@app.post("/video/add-text")
+async def video_add_text(
+    file: UploadFile = File(...),
+    text: str = Form(...),
+    position: str = Form("bottom"),
+    font_size: int = Form(48),
+    font_color: str = Form("white"),
+    start_time: float = Form(None),
+    end_time: float = Form(None),
+):
+    if not text or len(text) > 200:
+        raise HTTPException(status_code=400, detail="Texte invalide (1-200 caractères).")
+    if position not in _VALID_TEXT_POSITIONS:
+        raise HTTPException(status_code=400, detail="Position invalide.")
+    if font_size < 10 or font_size > 200:
+        raise HTTPException(status_code=400, detail="Taille de police invalide (10-200).")
+    uid = uuid.uuid4().hex
+    ext = Path(file.filename or "video.mp4").suffix.lower() or ".mp4"
+    input_path = UPLOAD_DIR / f"{uid}_input{ext}"
+    output_path = OUTPUT_DIR / f"{uid}_output{ext}"
+    try:
+        await _save_upload(file, input_path, MAX_SIZE["video"])
+        loop = asyncio.get_event_loop()
+        result = await loop.run_in_executor(
+            None, lambda: add_text_video(
+                input_path, output_path,
+                text=text, position=position,
+                font_size=font_size, font_color=font_color,
+                start_time=start_time, end_time=end_time,
+            )
+        )
+        stem = Path(file.filename).stem
+        return {"success": True, "download_id": uid, "output_filename": stem + "_text" + result.suffix}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error("%s", e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Erreur lors de l'ajout du texte")
     finally:
         input_path.unlink(missing_ok=True)
 

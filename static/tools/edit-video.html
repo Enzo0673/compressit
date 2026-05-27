@@ -2,12 +2,12 @@
 <html lang="fr">
 <head>
   <meta charset="UTF-8" /><meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Éditer vidéo — CompressIt</title>
-  <meta name="description" content="Éditer vidéo — outil gratuit, sans inscription, 100% local." />
+  <title>Éditeur vidéo — CompressIt</title>
+  <meta name="description" content="Éditeur vidéo complet — découper, ajouter du texte, fusionner des clips. Gratuit, 100% local." />
   <meta property="og:type" content="website" />
   <meta property="og:url" content="https://compressit-w0ro.onrender.com/tool/edit-video" />
-  <meta property="og:title" content="Éditer vidéo — CompressIt" />
-  <meta property="og:description" content="Éditer vidéo gratuitement, sans compte, directement dans votre navigateur." />
+  <meta property="og:title" content="Éditeur vidéo — CompressIt" />
+  <meta property="og:description" content="Éditeur vidéo complet gratuit, sans compte, directement dans votre navigateur." />
   <meta property="og:image" content="https://compressit-w0ro.onrender.com/static/icons/icon-512.png" />
   <meta name="twitter:card" content="summary" />
   <script src="/static/theme.js"></script>
@@ -16,30 +16,165 @@
   <link rel="apple-touch-icon" href="/static/icons/icon-192.png" />
   <link rel="icon" type="image/x-icon" href="/static/favicon.ico" />
   <link rel="icon" type="image/png" sizes="32x32" href="/static/icons/icon-32.png" />
-  <style>
-    .tab-bar { display:flex; gap:8px; margin-bottom:20px; }
-    .tab-btn { flex:1; padding:10px; border:1.5px solid var(--border); border-radius:10px; background:var(--surface); color:var(--text-muted); font-size:0.9rem; font-weight:600; cursor:pointer; transition:all .15s; }
-    .tab-btn.active { border-color:var(--primary); background:var(--primary-light); color:var(--primary); }
-    .tab-panel { display:none; } .tab-panel.active { display:block; }
-    .time-row { display:flex; gap:12px; align-items:flex-end; }
-    .time-row label { flex:1; display:flex; flex-direction:column; gap:6px; font-size:0.85rem; color:var(--text-muted); font-weight:500; }
-    .time-row input[type=number] { width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; font-size:0.95rem; }
-    .dim-row { display:flex; gap:12px; align-items:flex-end; }
-    .dim-row label { flex:1; display:flex; flex-direction:column; gap:6px; font-size:0.85rem; color:var(--text-muted); font-weight:500; }
-    .dim-row input[type=number] { width:100%; padding:10px 12px; border:1.5px solid var(--border); border-radius:10px; font-size:0.95rem; }
-    .hint-text { font-size:0.8rem; color:var(--text-muted); margin-top:6px; }
-  </style>
+  <script src="/static/utils.js"></script>
   <script defer src="https://cloud.umami.is/script.js" data-website-id="d13c5acb-0540-425c-bc8f-6eacb07fc47a"></script>
+  <style>
+    /* ── Tabs ── */
+    .tab-bar { display:flex; gap:6px; margin-bottom:20px; flex-wrap:wrap; }
+    .tab-btn {
+      flex:1; min-width:110px; padding:10px 6px;
+      border:1.5px solid var(--border); border-radius:10px;
+      background:var(--surface); color:var(--text-muted);
+      font-size:.82rem; font-weight:600; cursor:pointer; transition:all .15s;
+      text-align:center;
+    }
+    .tab-btn.active { border-color:var(--primary); background:var(--primary-light,#ede9fe); color:var(--primary); }
+    .tab-panel { display:none; } .tab-panel.active { display:flex; flex-direction:column; gap:16px; }
+
+    /* ── Video player ── */
+    .video-wrap {
+      background:#000; border-radius:10px; overflow:hidden;
+      display:flex; align-items:center; justify-content:center;
+      max-height:320px; position:relative;
+    }
+    .video-wrap video { max-width:100%; max-height:320px; display:block; }
+    .video-time-overlay {
+      position:absolute; bottom:8px; right:10px;
+      font-size:.78rem; color:#fff; background:rgba(0,0,0,.55);
+      padding:2px 8px; border-radius:6px; pointer-events:none;
+    }
+
+    /* ── Timeline trim ── */
+    .timeline-wrap {
+      position:relative; height:52px; background:var(--border);
+      border-radius:8px; overflow:hidden; cursor:pointer; user-select:none;
+    }
+    .timeline-thumb-strip {
+      position:absolute; inset:0; display:flex; gap:1px;
+      overflow:hidden; background:#000;
+    }
+    .timeline-thumb-strip canvas {
+      flex:1 0 auto; height:52px; image-rendering:auto;
+    }
+    .timeline-selection {
+      position:absolute; top:0; bottom:0;
+      background:rgba(99,102,241,.25);
+      border-left:3px solid #6366f1; border-right:3px solid #6366f1;
+      pointer-events:none;
+    }
+    .timeline-playhead {
+      position:absolute; top:0; bottom:0; width:2px;
+      background:#ef4444; pointer-events:none;
+    }
+    .timeline-handle {
+      position:absolute; top:0; bottom:0; width:14px;
+      cursor:ew-resize; z-index:2;
+      display:flex; align-items:center; justify-content:center;
+    }
+    .timeline-handle::after {
+      content:''; width:4px; height:32px; border-radius:3px;
+      background:#6366f1; box-shadow:0 0 0 2px white;
+    }
+    .timeline-labels {
+      display:flex; justify-content:space-between;
+      font-size:.75rem; color:var(--text-muted); margin-top:4px; padding:0 2px;
+    }
+
+    /* ── Time inputs ── */
+    .time-inputs { display:flex; gap:10px; align-items:flex-end; }
+    .time-inputs label {
+      flex:1; display:flex; flex-direction:column; gap:5px;
+      font-size:.82rem; color:var(--text-muted); font-weight:500;
+    }
+    .time-inputs input {
+      padding:9px 12px; border:1.5px solid var(--border); border-radius:8px;
+      font-size:.9rem; width:100%; background:var(--surface); color:var(--text);
+    }
+    .trim-info {
+      font-size:.82rem; color:var(--text-muted);
+      background:var(--border); border-radius:6px; padding:6px 12px;
+    }
+
+    /* ── Merge clips list ── */
+    .clip-list { display:flex; flex-direction:column; gap:8px; }
+    .clip-item {
+      display:flex; align-items:center; gap:10px;
+      background:var(--border); border-radius:8px; padding:10px 12px;
+    }
+    .clip-thumb {
+      width:72px; height:40px; border-radius:5px;
+      object-fit:cover; background:#000; flex-shrink:0;
+    }
+    .clip-info { flex:1; overflow:hidden; }
+    .clip-name { font-size:.85rem; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    .clip-dur { font-size:.75rem; color:var(--text-muted); }
+    .clip-order { display:flex; flex-direction:column; gap:2px; }
+    .clip-order button {
+      width:26px; height:22px; border:1.5px solid var(--border); border-radius:5px;
+      background:var(--surface); cursor:pointer; font-size:.75rem; line-height:1;
+      color:var(--text); display:flex; align-items:center; justify-content:center;
+    }
+    .clip-order button:hover { border-color:var(--primary); color:var(--primary); }
+    .clip-remove {
+      width:28px; height:28px; border:none; border-radius:6px; background:transparent;
+      cursor:pointer; font-size:1rem; color:var(--text-muted); flex-shrink:0;
+    }
+    .clip-remove:hover { color:#ef4444; }
+    .add-clip-btn {
+      display:flex; align-items:center; justify-content:center; gap:6px;
+      padding:10px; border:2px dashed var(--border); border-radius:8px;
+      background:transparent; cursor:pointer; font-size:.88rem; font-weight:600;
+      color:var(--text-muted); width:100%; transition:all .15s;
+    }
+    .add-clip-btn:hover { border-color:var(--primary); color:var(--primary); }
+
+    /* ── Text overlay ── */
+    .pos-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:6px; }
+    .pos-btn {
+      padding:10px 6px; border:2px solid var(--border); border-radius:8px;
+      background:var(--surface); font-size:.78rem; font-weight:600;
+      cursor:pointer; text-align:center; transition:all .15s; color:var(--text);
+    }
+    .pos-btn:hover, .pos-btn.selected { border-color:var(--primary); background:var(--primary-light,#ede9fe); color:var(--primary); }
+    .color-swatches { display:flex; gap:6px; flex-wrap:wrap; }
+    .color-swatch {
+      width:28px; height:28px; border-radius:50%; border:3px solid transparent;
+      cursor:pointer; transition:border-color .15s;
+    }
+    .color-swatch.selected { border-color:var(--primary); }
+    .text-preview-banner {
+      padding:10px 16px; background:#222; border-radius:8px; text-align:center;
+      font-weight:700; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
+    }
+
+    /* ── Resize tab ── */
+    .dim-grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+    .preset-btns { display:flex; flex-wrap:wrap; gap:6px; }
+    .preset-btn {
+      padding:5px 10px; border:1.5px solid var(--border); border-radius:7px;
+      background:var(--surface); font-size:.78rem; font-weight:600;
+      cursor:pointer; color:var(--text); transition:all .15s;
+    }
+    .preset-btn:hover { border-color:var(--primary); color:var(--primary); }
+
+    /* ── Section labels ── */
+    .section-label { font-weight:700; font-size:.88rem; margin-bottom:6px; }
+    .hint-text { font-size:.78rem; color:var(--text-muted); }
+  </style>
 </head>
 <body>
-  <div class="app">
+  <div class="app" style="max-width:720px">
     <header class="header">
       <div class="logo"><a href="/" class="logo-link"><svg width="32" height="32" viewBox="0 0 32 32" fill="none"><rect width="32" height="32" rx="8" fill="#6366f1"/><path d="M8 16L14 10L20 16L26 10" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 22L14 16L20 22L26 16" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" opacity="0.5"/></svg><span class="logo-text">CompressIt</span></a></div>
       <a href="/" class="btn-back">← Tous les outils</a>
       <button class="btn-theme" title="Thème sombre/clair" onclick="window.__theme.toggle(); this.textContent = window.__theme.get() === 'dark' ? '☀️' : '🌙'">🌙</button>
     </header>
-    <div class="tool-hero"><span class="tool-hero-icon">✂️</span><div><h1 class="tool-hero-title">Éditer vidéo</h1><p class="tool-hero-sub">Découper ou redimensionner une vidéo</p></div></div>
+
+    <div class="tool-hero"><span class="tool-hero-icon">🎬</span><div><h1 class="tool-hero-title">Éditeur vidéo</h1><p class="tool-hero-sub">Découper, sous-titrer, fusionner — 100% local</p></div></div>
+
     <main class="main">
+
+      <!-- Drop zone -->
       <div class="drop-zone" id="dropZone">
         <div class="drop-icon"><svg width="48" height="48" viewBox="0 0 48 48" fill="none"><path d="M24 8V32M24 8L16 16M24 8L32 16" stroke="#6366f1" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/><path d="M8 36H40" stroke="#6366f1" stroke-width="3" stroke-linecap="round"/></svg></div>
         <p class="drop-title">Glissez votre vidéo ici</p><p class="drop-sub">ou</p>
@@ -47,121 +182,701 @@
         <input type="file" id="fileInput" hidden accept="video/*" />
         <p class="drop-formats">MP4 · MOV · AVI · MKV · WebM</p>
       </div>
-      <div class="config-panel" id="configPanel" hidden>
-        <div class="file-preview" id="filePreview"></div>
+
+      <!-- Editor panel -->
+      <div id="editorPanel" hidden style="background:var(--surface);border-radius:var(--radius);box-shadow:var(--shadow-lg);padding:24px;display:flex;flex-direction:column;gap:16px">
+
+        <!-- File info -->
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="fileName" style="font-weight:600;font-size:.9rem;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></div>
+          <div id="fileInfo" style="font-size:.82rem;color:var(--text-muted);white-space:nowrap"></div>
+        </div>
+
+        <!-- Video preview -->
+        <div class="video-wrap" id="videoWrap">
+          <video id="videoPlayer" preload="metadata" style="display:none"></video>
+          <div class="video-time-overlay" id="timeOverlay">0:00 / 0:00</div>
+        </div>
+
+        <!-- Playback controls -->
+        <div style="display:flex;align-items:center;gap:10px">
+          <button id="btnPlayPause" style="width:40px;height:40px;border-radius:50%;border:2px solid var(--primary);background:var(--primary);color:white;font-size:1rem;cursor:pointer;display:flex;align-items:center;justify-content:center">▶</button>
+          <div style="flex:1;position:relative">
+            <input type="range" id="seekBar" min="0" max="1000" value="0" style="width:100%;accent-color:var(--primary)" />
+          </div>
+          <div id="volWrap" style="display:flex;align-items:center;gap:6px">
+            <span style="font-size:.85rem">🔊</span>
+            <input type="range" id="volBar" min="0" max="100" value="80" style="width:64px;accent-color:var(--primary)" />
+          </div>
+        </div>
+
+        <!-- Tab bar -->
         <div class="tab-bar">
           <button class="tab-btn active" data-tab="trim">✂️ Découper</button>
+          <button class="tab-btn" data-tab="text">✍️ Texte</button>
+          <button class="tab-btn" data-tab="merge">🔗 Fusionner</button>
           <button class="tab-btn" data-tab="resize">📐 Redimensionner</button>
         </div>
-        <!-- Onglet Découper -->
+
+        <!-- TAB: Découper -->
         <div class="tab-panel active" id="tabTrim">
-          <div class="form-group">
-            <p class="section-label">Plage à conserver</p>
-            <div class="time-row" style="margin-top:10px">
-              <label>Début (secondes)<input type="number" id="startTime" min="0" step="0.1" value="0" /></label>
-              <label>Fin (secondes)<input type="number" id="endTime" min="0" step="0.1" placeholder="ex: 30" /></label>
+          <div>
+            <p class="section-label">Sélection sur la timeline</p>
+            <div class="timeline-wrap" id="timelineWrap">
+              <div class="timeline-thumb-strip" id="thumbStrip"></div>
+              <div class="timeline-selection" id="timelineSel"></div>
+              <div class="timeline-playhead" id="timelineHead"></div>
+              <div class="timeline-handle" id="handleStart" style="left:0;transform:translateX(-3px)"></div>
+              <div class="timeline-handle" id="handleEnd" style="right:0;transform:translateX(3px)"></div>
             </div>
-            <p class="hint-text">Exemple : début 10, fin 40 → extrait 30 secondes au milieu</p>
+            <div class="timeline-labels">
+              <span id="tlStart">0:00</span>
+              <span id="tlMid"></span>
+              <span id="tlEnd">0:00</span>
+            </div>
           </div>
-          <button class="btn-compress" id="btnTrim">✂️ Découper</button>
+          <div class="time-inputs">
+            <label>Début
+              <input type="number" id="inStart" step="0.1" min="0" value="0" />
+            </label>
+            <label>Fin (s)
+              <input type="number" id="inEnd" step="0.1" min="0" />
+            </label>
+          </div>
+          <div class="trim-info" id="trimInfo">Durée sélectionnée : —</div>
+          <button class="btn-compress" id="btnTrim">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            Découper et télécharger
+          </button>
         </div>
-        <!-- Onglet Redimensionner -->
-        <div class="tab-panel" id="tabResize">
-          <div class="form-group">
-            <p class="section-label">Nouvelles dimensions</p>
-            <div class="dim-row" style="margin-top:10px">
-              <label>Largeur (px)<input type="number" id="resizeWidth" min="1" max="7680" placeholder="ex: 1280" /></label>
-              <label>Hauteur (px)<input type="number" id="resizeHeight" min="1" max="4320" placeholder="ex: 720" /></label>
-            </div>
-            <p class="hint-text">Laissez une dimension vide pour conserver le ratio automatiquement.</p>
+
+        <!-- TAB: Texte -->
+        <div class="tab-panel" id="tabText">
+          <div>
+            <p class="section-label">Texte à afficher</p>
+            <input type="text" id="textInput" class="text-input" placeholder="Ex : Bienvenue ! ou @votrepseudo" maxlength="200" />
           </div>
-          <button class="btn-compress" id="btnResize">📐 Redimensionner</button>
+          <div>
+            <p class="section-label">Position</p>
+            <div class="pos-grid">
+              <button class="pos-btn" data-pos="top-left">↖ Haut gauche</button>
+              <button class="pos-btn selected" data-pos="top">⬆ Haut centre</button>
+              <button class="pos-btn" data-pos="top-right">↗ Haut droite</button>
+              <button class="pos-btn" data-pos="bottom-left">↙ Bas gauche</button>
+              <button class="pos-btn selected" data-pos="bottom">⬇ Bas centre</button>
+              <button class="pos-btn" data-pos="bottom-right">↘ Bas droite</button>
+            </div>
+          </div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap">
+            <div style="flex:1;min-width:140px">
+              <p class="section-label">Taille (px)</p>
+              <input type="range" id="fontSizeSlider" min="20" max="120" value="48" style="width:100%;accent-color:var(--primary)" />
+              <div style="font-size:.8rem;color:var(--text-muted);text-align:center" id="fontSizeVal">48 px</div>
+            </div>
+            <div style="flex:1;min-width:140px">
+              <p class="section-label">Couleur</p>
+              <div class="color-swatches">
+                <div class="color-swatch selected" data-color="white" style="background:#fff;border-color:var(--border)"></div>
+                <div class="color-swatch" data-color="yellow" style="background:#fde047"></div>
+                <div class="color-swatch" data-color="#ff4444" style="background:#ff4444"></div>
+                <div class="color-swatch" data-color="#00e5ff" style="background:#00e5ff"></div>
+                <div class="color-swatch" data-color="black" style="background:#000;border-color:var(--border)"></div>
+              </div>
+            </div>
+          </div>
+          <div>
+            <p class="section-label">Afficher uniquement entre (optionnel)</p>
+            <div class="time-inputs">
+              <label>Début (s) <input type="number" id="textStart" step="0.1" min="0" placeholder="Toute la vidéo" /></label>
+              <label>Fin (s) <input type="number" id="textEnd" step="0.1" min="0" placeholder="Toute la vidéo" /></label>
+            </div>
+          </div>
+          <div>
+            <p class="section-label">Aperçu</p>
+            <div class="text-preview-banner" id="textPreviewBanner" style="color:white;font-size:1rem">Votre texte apparaîtra ici</div>
+          </div>
+          <button class="btn-compress" id="btnAddText">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            Appliquer le texte et télécharger
+          </button>
+        </div>
+
+        <!-- TAB: Fusionner -->
+        <div class="tab-panel" id="tabMerge">
+          <p class="hint-text">Ajoutez plusieurs clips dans l'ordre souhaité — ils seront fusionnés en une seule vidéo.</p>
+          <div class="clip-list" id="clipList">
+            <!-- Clip principal déjà chargé -->
+          </div>
+          <button class="add-clip-btn" id="btnAddClip">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3v12M3 9h12" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+            Ajouter un clip
+          </button>
+          <input type="file" id="clipFileInput" hidden accept="video/*" multiple />
+          <button class="btn-compress" id="btnMerge">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            Fusionner et télécharger
+          </button>
+        </div>
+
+        <!-- TAB: Redimensionner -->
+        <div class="tab-panel" id="tabResize">
+          <div>
+            <p class="section-label">Formats rapides</p>
+            <div class="preset-btns">
+              <button class="preset-btn" onclick="applyVideoPreset(1920,1080)">FHD 1920×1080</button>
+              <button class="preset-btn" onclick="applyVideoPreset(1280,720)">HD 1280×720</button>
+              <button class="preset-btn" onclick="applyVideoPreset(854,480)">SD 854×480</button>
+              <button class="preset-btn" onclick="applyVideoPreset(1080,1920)">Vertical 1080×1920</button>
+              <button class="preset-btn" onclick="applyVideoPreset(1080,1080)">Carré 1080×1080</button>
+              <button class="preset-btn" onclick="applyVideoPreset(null,720)">720p</button>
+            </div>
+          </div>
+          <div class="dim-grid">
+            <div class="form-group">
+              <label style="font-weight:600;font-size:.88rem">Largeur (px)</label>
+              <input type="number" id="resizeW" class="text-input" placeholder="ex: 1920" min="1" max="7680" />
+            </div>
+            <div class="form-group">
+              <label style="font-weight:600;font-size:.88rem">Hauteur (px)</label>
+              <input type="number" id="resizeH" class="text-input" placeholder="ex: 1080" min="1" max="4320" />
+            </div>
+          </div>
+          <p class="hint-text">Laissez une dimension vide pour conserver le ratio automatiquement.</p>
+          <button class="btn-compress" id="btnResize">
+            <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M10 3V13M10 13L6 9M10 13L14 9" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><rect x="3" y="15" width="14" height="2" rx="1" fill="currentColor"/></svg>
+            Redimensionner et télécharger
+          </button>
         </div>
       </div>
-      <div class="progress-panel" id="progressPanel" hidden><div class="progress-spinner"></div><p class="progress-label" id="progressLabel">Traitement en cours…</p><div class="progress-bar-wrap"><div class="progress-bar" style="width:60%"></div></div></div>
+
+      <!-- Progress -->
+      <div class="progress-panel" id="progressPanel" hidden>
+        <div class="progress-spinner"></div>
+        <p class="progress-label" id="progressLabel">Traitement en cours…</p>
+        <div class="progress-bar-wrap"><div class="progress-bar" id="progressBar" style="width:60%"></div></div>
+      </div>
+
+      <!-- Result -->
       <div class="result-panel" id="resultPanel" hidden>
         <div class="result-badge" style="background:linear-gradient(135deg,#6366f1,#4f46e5)">✓ Vidéo prête</div>
         <div class="result-actions">
           <a class="btn-download" id="btnDownload" href="#"><svg width="18" height="18" viewBox="0 0 18 18" fill="none"><path d="M9 3V11M9 11L5 7M9 11L13 7" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><path d="M3 14H15" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>Télécharger</a>
-          <button class="btn-reset" id="btnReset">Nouveau</button>
+          <button class="btn-reset" id="btnReset">Nouveau fichier</button>
         </div>
       </div>
-      <div class="error-panel" id="errorPanel" hidden><div class="error-icon">!</div><p class="error-msg" id="errorMsg"></p><button class="btn-reset" id="btnErrorReset">Réessayer</button></div>
+
+      <!-- Error -->
+      <div class="error-panel" id="errorPanel" hidden>
+        <div class="error-icon">!</div>
+        <p class="error-msg" id="errorMsg"></p>
+        <button class="btn-reset" id="btnErrorReset">Réessayer</button>
+      </div>
+
     </main>
     <footer class="footer">100% local &mdash; vos fichiers ne quittent jamais votre machine</footer>
   </div>
-  <script src="/static/utils.js"></script>
-  <script>
-    let currentFile = null;
-    const ALL = ['dropZone','configPanel','progressPanel','resultPanel','errorPanel'].map(id => document.getElementById(id));
-    function showPanel(p) { ALL.forEach(x => { x.hidden = x !== p; x.style.display = x === p ? '' : 'none'; }); }
 
-    // Tabs
+  <script>
+    /* ================================================================
+       État global
+    ================================================================ */
+    let currentFile  = null;
+    let videoDur     = 0;
+    let trimStart    = 0;
+    let trimEnd      = 0;
+    let selectedPos  = 'bottom';
+    let selectedColor = 'white';
+    let clipFiles    = [];   // tableau {file, name, dur, thumbUrl}
+
+    const video    = document.getElementById('videoPlayer');
+    const seekBar  = document.getElementById('seekBar');
+    const volBar   = document.getElementById('volBar');
+    const timeOverlay = document.getElementById('timeOverlay');
+
+    const ALL_PANELS = ['dropZone','editorPanel','progressPanel','resultPanel','errorPanel']
+      .map(id => document.getElementById(id));
+    function showPanel(p) {
+      ALL_PANELS.forEach(x => { x.hidden = x !== p; x.style.display = x === p ? '' : 'none'; });
+    }
+
+    /* ================================================================
+       Tabs
+    ================================================================ */
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
         document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
         btn.classList.add('active');
-        document.getElementById('tab' + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1)).classList.add('active');
+        const tabId = 'tab' + btn.dataset.tab.charAt(0).toUpperCase() + btn.dataset.tab.slice(1);
+        document.getElementById(tabId).classList.add('active');
       });
     });
 
-    const dropZone = ALL[0], fileInput = document.getElementById('fileInput');
+    /* ================================================================
+       Drop zone / File input
+    ================================================================ */
+    const dropZone  = ALL_PANELS[0];
+    const fileInput = document.getElementById('fileInput');
+
     dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag-over'); });
     dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag-over'));
-    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) load(e.dataTransfer.files[0]); });
+    dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag-over'); if (e.dataTransfer.files[0]) loadFile(e.dataTransfer.files[0]); });
     dropZone.addEventListener('click', e => { if (!e.target.closest('label')) fileInput.click(); });
-    fileInput.addEventListener('change', () => { if (fileInput.files[0]) load(fileInput.files[0]); });
+    fileInput.addEventListener('change', () => { if (fileInput.files[0]) loadFile(fileInput.files[0]); });
 
-    function load(f) {
-      const err = checkFileSize(f, 'video');
-      if (err) { document.getElementById('errorMsg').textContent = err; showPanel(ALL[4]); return; }
-      currentFile = f;
-      const preview = document.getElementById('filePreview');
-      preview.innerHTML = `<div class="file-info"><span class="file-name">${f.name}</span><span class="file-size">${(f.size/1024/1024).toFixed(1)} Mo</span></div>`;
-      showPanel(ALL[1]);
+    function fmtTime(s) {
+      const m = Math.floor(s / 60), sec = Math.floor(s % 60);
+      return `${m}:${sec.toString().padStart(2,'0')}`;
+    }
+    function fmtSize(b) { return b < 1024*1024 ? (b/1024).toFixed(1)+' Ko' : (b/(1024*1024)).toFixed(2)+' Mo'; }
+
+    function loadFile(file) {
+      const err = checkFileSize(file, 'video');
+      if (err) { document.getElementById('errorMsg').textContent = err; showPanel(ALL_PANELS[4]); return; }
+
+      currentFile = file;
+      const url = URL.createObjectURL(file);
+      video.src = url;
+      video.style.display = '';
+
+      video.addEventListener('loadedmetadata', function onMeta() {
+        video.removeEventListener('loadedmetadata', onMeta);
+        videoDur = video.duration;
+        trimStart = 0;
+        trimEnd   = videoDur;
+
+        document.getElementById('fileName').textContent = file.name;
+        document.getElementById('fileInfo').textContent = fmtSize(file.size) + ' — ' + fmtTime(videoDur);
+
+        document.getElementById('inStart').value = '0';
+        document.getElementById('inEnd').value   = videoDur.toFixed(1);
+        document.getElementById('inEnd').max      = videoDur;
+        document.getElementById('inStart').max    = videoDur;
+
+        updateTrimInfo();
+        updateTimelineHandles();
+        generateThumbnails(url, videoDur);
+        initMergeList();
+
+        showPanel(ALL_PANELS[1]);
+        video.volume = volBar.value / 100;
+      });
     }
 
-    async function submit(url, fd, label) {
-      if (!currentFile) return;
+    /* ================================================================
+       Video player controls
+    ================================================================ */
+    const btnPlay = document.getElementById('btnPlayPause');
+
+    btnPlay.addEventListener('click', () => {
+      if (video.paused) { video.play(); btnPlay.textContent = '⏸'; }
+      else { video.pause(); btnPlay.textContent = '▶'; }
+    });
+
+    video.addEventListener('timeupdate', () => {
+      const pct = videoDur ? (video.currentTime / videoDur) * 1000 : 0;
+      seekBar.value = pct;
+      timeOverlay.textContent = fmtTime(video.currentTime) + ' / ' + fmtTime(videoDur);
+      updatePlayhead();
+    });
+    video.addEventListener('ended', () => { btnPlay.textContent = '▶'; });
+
+    seekBar.addEventListener('input', () => {
+      if (videoDur) video.currentTime = (seekBar.value / 1000) * videoDur;
+    });
+    volBar.addEventListener('input', () => { video.volume = volBar.value / 100; });
+
+    /* ================================================================
+       Timeline thumbnail generation
+    ================================================================ */
+    const THUMB_COUNT = 12;
+
+    function generateThumbnails(url, dur) {
+      const strip = document.getElementById('thumbStrip');
+      strip.innerHTML = '';
+      const thumbVid = document.createElement('video');
+      thumbVid.src = url;
+      thumbVid.muted = true;
+      thumbVid.preload = 'auto';
+      let i = 0;
+      const offscreen = document.createElement('canvas');
+      offscreen.width  = 80;
+      offscreen.height = 52;
+      const octx = offscreen.getContext('2d');
+
+      const canvases = Array.from({length: THUMB_COUNT}, () => {
+        const c = document.createElement('canvas');
+        c.width = 80; c.height = 52;
+        c.style.cssText = 'flex:1 0 auto;height:52px;';
+        strip.appendChild(c);
+        return c;
+      });
+
+      function captureFrame(idx) {
+        if (idx >= THUMB_COUNT) return;
+        const t = (dur / THUMB_COUNT) * (idx + 0.5);
+        thumbVid.currentTime = t;
+      }
+
+      thumbVid.addEventListener('seeked', function onSeek() {
+        if (i < THUMB_COUNT) {
+          octx.drawImage(thumbVid, 0, 0, 80, 52);
+          canvases[i].getContext('2d').drawImage(offscreen, 0, 0);
+          i++;
+          captureFrame(i);
+        } else {
+          thumbVid.removeEventListener('seeked', onSeek);
+        }
+      });
+
+      thumbVid.addEventListener('loadeddata', () => captureFrame(0), { once: true });
+    }
+
+    /* ================================================================
+       Timeline drag handles
+    ================================================================ */
+    const timelineWrap  = document.getElementById('timelineWrap');
+    const timelineSel   = document.getElementById('timelineSel');
+    const timelineHead  = document.getElementById('timelineHead');
+    const handleStart   = document.getElementById('handleStart');
+    const handleEnd     = document.getElementById('handleEnd');
+
+    function timelineWidth() { return timelineWrap.getBoundingClientRect().width; }
+
+    function updateTimelineHandles() {
+      if (!videoDur) return;
+      const w = timelineWidth();
+      const ls = (trimStart / videoDur) * w;
+      const le = (trimEnd   / videoDur) * w;
+      handleStart.style.left  = ls + 'px';
+      handleEnd.style.left    = le + 'px';
+      timelineSel.style.left  = ls + 'px';
+      timelineSel.style.width = (le - ls) + 'px';
+      document.getElementById('tlStart').textContent = fmtTime(0);
+      document.getElementById('tlMid').textContent   = fmtTime(videoDur / 2);
+      document.getElementById('tlEnd').textContent   = fmtTime(videoDur);
+    }
+
+    function updatePlayhead() {
+      if (!videoDur) return;
+      const pct = video.currentTime / videoDur;
+      timelineHead.style.left = (pct * 100) + '%';
+    }
+
+    let dragging = null;
+
+    function startDrag(e, which) {
+      e.preventDefault();
+      dragging = which;
+      document.addEventListener('mousemove', onDrag);
+      document.addEventListener('touchmove', onDrag, { passive:false });
+      document.addEventListener('mouseup',  stopDrag);
+      document.addEventListener('touchend', stopDrag);
+    }
+
+    handleStart.addEventListener('mousedown', e => startDrag(e, 'start'));
+    handleEnd.addEventListener('mousedown',   e => startDrag(e, 'end'));
+    handleStart.addEventListener('touchstart', e => startDrag(e, 'start'), { passive:false });
+    handleEnd.addEventListener('touchstart',   e => startDrag(e, 'end'), { passive:false });
+
+    function onDrag(e) {
+      if (!dragging) return;
+      e.preventDefault();
+      const rect = timelineWrap.getBoundingClientRect();
+      const cx = (e.touches ? e.touches[0].clientX : e.clientX);
+      let pct = Math.max(0, Math.min(1, (cx - rect.left) / rect.width));
+      let t = pct * videoDur;
+
+      if (dragging === 'start') {
+        trimStart = Math.min(t, trimEnd - 0.1);
+        document.getElementById('inStart').value = trimStart.toFixed(1);
+        // Move video to start position for preview
+        video.currentTime = trimStart;
+      } else {
+        trimEnd = Math.max(t, trimStart + 0.1);
+        document.getElementById('inEnd').value = trimEnd.toFixed(1);
+      }
+      updateTimelineHandles();
+      updateTrimInfo();
+    }
+
+    function stopDrag() {
+      dragging = null;
+      document.removeEventListener('mousemove', onDrag);
+      document.removeEventListener('touchmove', onDrag);
+      document.removeEventListener('mouseup',  stopDrag);
+      document.removeEventListener('touchend', stopDrag);
+    }
+
+    // Timeline click to seek
+    timelineWrap.addEventListener('click', e => {
+      if (dragging) return;
+      const rect = timelineWrap.getBoundingClientRect();
+      const pct = Math.max(0, Math.min(1, (e.clientX - rect.left) / rect.width));
+      video.currentTime = pct * videoDur;
+    });
+
+    // Manual time inputs sync to timeline
+    document.getElementById('inStart').addEventListener('input', () => {
+      const v = parseFloat(document.getElementById('inStart').value) || 0;
+      trimStart = Math.max(0, Math.min(v, trimEnd - 0.1));
+      updateTimelineHandles();
+      updateTrimInfo();
+      video.currentTime = trimStart;
+    });
+    document.getElementById('inEnd').addEventListener('input', () => {
+      const v = parseFloat(document.getElementById('inEnd').value) || videoDur;
+      trimEnd = Math.max(trimStart + 0.1, Math.min(v, videoDur));
+      updateTimelineHandles();
+      updateTrimInfo();
+    });
+
+    function updateTrimInfo() {
+      const dur = trimEnd - trimStart;
+      document.getElementById('trimInfo').textContent =
+        `Durée sélectionnée : ${fmtTime(dur)} (${trimStart.toFixed(1)}s → ${trimEnd.toFixed(1)}s)`;
+    }
+
+    /* ================================================================
+       Text tab
+    ================================================================ */
+    // Position buttons
+    document.querySelectorAll('[data-pos]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('[data-pos]').forEach(b => b.classList.remove('selected'));
+        btn.classList.add('selected');
+        selectedPos = btn.dataset.pos;
+      });
+    });
+    // Set default "bottom" as selected (only one)
+    document.querySelectorAll('[data-pos]').forEach(b => b.classList.remove('selected'));
+    document.querySelector('[data-pos="bottom"]').classList.add('selected');
+
+    // Color swatches
+    document.querySelectorAll('.color-swatch').forEach(sw => {
+      sw.addEventListener('click', () => {
+        document.querySelectorAll('.color-swatch').forEach(s => s.classList.remove('selected'));
+        sw.classList.add('selected');
+        selectedColor = sw.dataset.color;
+        updateTextPreview();
+      });
+    });
+
+    // Font size slider
+    document.getElementById('fontSizeSlider').addEventListener('input', function() {
+      document.getElementById('fontSizeVal').textContent = this.value + ' px';
+      updateTextPreview();
+    });
+
+    // Text input preview
+    document.getElementById('textInput').addEventListener('input', updateTextPreview);
+
+    function updateTextPreview() {
+      const txt  = document.getElementById('textInput').value || 'Votre texte apparaîtra ici';
+      const sz   = document.getElementById('fontSizeSlider').value;
+      const banner = document.getElementById('textPreviewBanner');
+      banner.textContent = txt;
+      banner.style.color    = selectedColor;
+      banner.style.fontSize = Math.min(sz, 28) + 'px';
+    }
+
+    /* ================================================================
+       Merge clips list
+    ================================================================ */
+    function initMergeList() {
+      clipFiles = [{ file: currentFile, name: currentFile.name, dur: videoDur, thumbUrl: null }];
+      renderClipList();
+    }
+
+    function renderClipList() {
+      const list = document.getElementById('clipList');
+      list.innerHTML = '';
+      clipFiles.forEach((clip, idx) => {
+        const item = document.createElement('div');
+        item.className = 'clip-item';
+        item.innerHTML = `
+          <canvas class="clip-thumb" width="72" height="40" id="clipThumb${idx}"></canvas>
+          <div class="clip-info">
+            <div class="clip-name">${idx + 1}. ${clip.name}</div>
+            <div class="clip-dur">${clip.dur ? fmtTime(clip.dur) : '…'}</div>
+          </div>
+          <div class="clip-order">
+            <button onclick="moveClip(${idx}, -1)" ${idx === 0 ? 'disabled' : ''}>▲</button>
+            <button onclick="moveClip(${idx},  1)" ${idx === clipFiles.length-1 ? 'disabled' : ''}>▼</button>
+          </div>
+          <button class="clip-remove" onclick="removeClip(${idx})" title="Supprimer">✕</button>
+        `;
+        list.appendChild(item);
+        if (clip.thumbUrl) drawClipThumb(idx, clip.thumbUrl);
+        else if (clip.file) extractClipThumb(idx, clip.file);
+      });
+    }
+
+    function extractClipThumb(idx, file) {
+      const url = URL.createObjectURL(file);
+      const v = document.createElement('video');
+      v.src = url; v.muted = true; v.preload = 'auto';
+      v.addEventListener('loadeddata', () => {
+        v.currentTime = Math.min(1, v.duration / 4);
+      }, { once: true });
+      v.addEventListener('seeked', () => {
+        const c = document.createElement('canvas');
+        c.width = 72; c.height = 40;
+        c.getContext('2d').drawImage(v, 0, 0, 72, 40);
+        clipFiles[idx].thumbUrl = c.toDataURL();
+        // Update dur if missing
+        if (!clipFiles[idx].dur) {
+          clipFiles[idx].dur = v.duration;
+          renderClipList();
+        } else {
+          drawClipThumb(idx, clipFiles[idx].thumbUrl);
+        }
+      }, { once: true });
+    }
+
+    function drawClipThumb(idx, dataUrl) {
+      const canvas = document.getElementById('clipThumb' + idx);
+      if (!canvas) return;
+      const img = new Image();
+      img.onload = () => canvas.getContext('2d').drawImage(img, 0, 0, 72, 40);
+      img.src = dataUrl;
+    }
+
+    function moveClip(idx, dir) {
+      const to = idx + dir;
+      if (to < 0 || to >= clipFiles.length) return;
+      [clipFiles[idx], clipFiles[to]] = [clipFiles[to], clipFiles[idx]];
+      renderClipList();
+    }
+
+    function removeClip(idx) {
+      if (clipFiles.length <= 1) { alert('Au moins un clip est requis.'); return; }
+      clipFiles.splice(idx, 1);
+      renderClipList();
+    }
+
+    document.getElementById('btnAddClip').addEventListener('click', () => {
+      document.getElementById('clipFileInput').click();
+    });
+    document.getElementById('clipFileInput').addEventListener('change', function() {
+      Array.from(this.files).forEach(f => {
+        const v = document.createElement('video');
+        v.src = URL.createObjectURL(f);
+        v.preload = 'metadata';
+        v.addEventListener('loadedmetadata', () => {
+          clipFiles.push({ file: f, name: f.name, dur: v.duration, thumbUrl: null });
+          renderClipList();
+          extractClipThumb(clipFiles.length - 1, f);
+        }, { once: true });
+      });
+      this.value = '';
+    });
+
+    /* ================================================================
+       Resize presets
+    ================================================================ */
+    function applyVideoPreset(w, h) {
+      document.getElementById('resizeW').value = w || '';
+      document.getElementById('resizeH').value = h || '';
+    }
+
+    /* ================================================================
+       Submit helpers
+    ================================================================ */
+    async function submit(url, formData, label) {
       document.getElementById('progressLabel').textContent = label;
-      showPanel(ALL[2]);
+      showPanel(ALL_PANELS[2]);
       try {
-        const res = await fetch(url, { method: 'POST', body: fd });
+        const res  = await fetch(url, { method:'POST', body: formData });
         const data = await res.json();
         if (!res.ok) throw new Error(data.detail || 'Erreur serveur');
-        document.getElementById('btnDownload').href = `/download/${data.download_id}`;
+        document.getElementById('btnDownload').href     = `/download/${data.download_id}`;
         document.getElementById('btnDownload').download = data.output_filename;
-        showPanel(ALL[3]);
-      } catch(err) { document.getElementById('errorMsg').textContent = err.message; showPanel(ALL[4]); }
+        showPanel(ALL_PANELS[3]);
+      } catch(err) {
+        document.getElementById('errorMsg').textContent = err.message;
+        showPanel(ALL_PANELS[4]);
+      }
     }
 
-    document.getElementById('btnTrim').addEventListener('click', withButtonLock(document.getElementById('btnTrim'), async () => {
-      const start = parseFloat(document.getElementById('startTime').value) || 0;
-      const end = parseFloat(document.getElementById('endTime').value);
-      if (!end || end <= start) { document.getElementById('errorMsg').textContent = 'Timestamps invalides.'; showPanel(ALL[4]); return; }
+    /* ----------------------------------------------------------------
+       Découper
+    ---------------------------------------------------------------- */
+    document.getElementById('btnTrim').addEventListener('click', async () => {
+      if (!currentFile) return;
+      if (trimEnd <= trimStart) {
+        document.getElementById('errorMsg').textContent = 'La fin doit être après le début.';
+        showPanel(ALL_PANELS[4]); return;
+      }
       const fd = new FormData();
       fd.append('file', currentFile);
-      fd.append('start', start);
-      fd.append('end', end);
+      fd.append('start', trimStart.toFixed(3));
+      fd.append('end',   trimEnd.toFixed(3));
       await submit('/video/trim', fd, 'Découpage en cours…');
-    }));
+    });
 
-    document.getElementById('btnResize').addEventListener('click', withButtonLock(document.getElementById('btnResize'), async () => {
-      const w = parseInt(document.getElementById('resizeWidth').value) || null;
-      const h = parseInt(document.getElementById('resizeHeight').value) || null;
-      if (!w && !h) { document.getElementById('errorMsg').textContent = 'Entrez au moins une dimension.'; showPanel(ALL[4]); return; }
+    /* ----------------------------------------------------------------
+       Texte
+    ---------------------------------------------------------------- */
+    document.getElementById('btnAddText').addEventListener('click', async () => {
+      if (!currentFile) return;
+      const text = document.getElementById('textInput').value.trim();
+      if (!text) { alert('Saisissez un texte.'); return; }
+      const fd = new FormData();
+      fd.append('file', currentFile);
+      fd.append('text', text);
+      fd.append('position', selectedPos);
+      fd.append('font_size', document.getElementById('fontSizeSlider').value);
+      fd.append('font_color', selectedColor);
+      const ts = document.getElementById('textStart').value;
+      const te = document.getElementById('textEnd').value;
+      if (ts) fd.append('start_time', ts);
+      if (te) fd.append('end_time', te);
+      await submit('/video/add-text', fd, 'Ajout du texte en cours…');
+    });
+
+    /* ----------------------------------------------------------------
+       Fusionner
+    ---------------------------------------------------------------- */
+    document.getElementById('btnMerge').addEventListener('click', async () => {
+      if (clipFiles.length < 2) { alert('Ajoutez au moins 2 clips.'); return; }
+      const fd = new FormData();
+      clipFiles.forEach(clip => fd.append('files', clip.file));
+      await submit('/video/merge', fd, 'Fusion en cours…');
+    });
+
+    /* ----------------------------------------------------------------
+       Redimensionner
+    ---------------------------------------------------------------- */
+    document.getElementById('btnResize').addEventListener('click', async () => {
+      if (!currentFile) return;
+      const w = parseInt(document.getElementById('resizeW').value) || null;
+      const h = parseInt(document.getElementById('resizeH').value) || null;
+      if (!w && !h) { alert('Entrez au moins une dimension.'); return; }
       const fd = new FormData();
       fd.append('file', currentFile);
       if (w) fd.append('width', w);
       if (h) fd.append('height', h);
       await submit('/video/resize', fd, 'Redimensionnement en cours…');
-    }));
+    });
 
-    function reset() { currentFile = null; showPanel(ALL[0]); }
+    /* ================================================================
+       Reset
+    ================================================================ */
+    function reset() {
+      currentFile = null; clipFiles = []; videoDur = 0;
+      video.src = ''; video.style.display = 'none';
+      btnPlay.textContent = '▶';
+      seekBar.value = 0;
+      showPanel(ALL_PANELS[0]);
+    }
     document.getElementById('btnReset').addEventListener('click', reset);
     document.getElementById('btnErrorReset').addEventListener('click', reset);
-    showPanel(ALL[0]);
+
+    /* ================================================================
+       Init
+    ================================================================ */
+    showPanel(ALL_PANELS[0]);
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('/service-worker.js');
   </script>
   <script src="/static/banner.js"></script>
